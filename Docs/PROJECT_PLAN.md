@@ -73,7 +73,7 @@
 |---|---|---|
 | `toeic20_start` | string | 開始日，格式 `YYYY-MM-DD` |
 | `toeic20_tasks` | object | `{ "d{day}:{taskId}": true }`，只存已完成項 |
-| `toeic20_vocab` | object | `{ "{day}": [ { w, m, ex, n }, ... ] }`，w=單字 m=中文 ex=例句 n=備註 |
+| `toeic20_vocab` | object | `{ "{day}": [ { w, m, exs:[..], n }, ... ] }`，w=單字 m=中文 exs=例句陣列 n=備註。單字跨全表去重（trim+不分大小寫），重複輸入只把新例句補進既有的字、不另建、不重排批次。舊 `ex`(字串) 載入時自動轉成 `exs`。 |
 
 遷移到帳號版時，這三個結構直接對應後端的資料表 / 文件即可（見 §7）。
 
