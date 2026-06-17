@@ -198,11 +198,35 @@ function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); not
 function saveLog(){ localStorage.setItem(LS.log, JSON.stringify(log)); notifyChange(); }
 // 正規化一天的紀錄（相容舊的數字格式）→ {c:對, x:錯, n:總}
 function dayTotal(e){ if(!e) return {c:0,x:0,n:0}; if(typeof e==="number") return {c:e,x:0,n:e}; const c=e.c||0,x=e.x||0; return {c,x,n:c+x}; }
-// 練習一個單字（測驗答對/答錯、記得/忘了）→ 今天對或錯 +1
-function bumpPractice(correct){
-  const d=todayISO(); const e=dayTotal(log[d]);
-  if(correct) e.c++; else e.x++;
-  log[d]={c:e.c, x:e.x}; saveLog();
+// 練習一個單字（測驗答對/答錯、記得/忘了）→ 該字今天對或錯 +1（記在 word.pr）
+function bumpPractice(correct, wordObj){
+  if(!wordObj) return;
+  const d=todayISO();
+  if(!wordObj.pr) wordObj.pr={};
+  const e=wordObj.pr[d]||{c:0,x:0};
+  if(correct) e.c=(e.c||0)+1; else e.x=(e.x||0)+1;
+  wordObj.pr[d]={c:e.c||0, x:e.x||0};
+  // 持久化由呼叫端的 saveVocab 負責（pr 在 vocab 內）
+}
+// 每日總計：逐字 pr 加總 ＋ 舊版彙總 log（避免遺失既有資料）→ { date: {c,x} }
+function dailyAgg(){
+  const agg={};
+  const add=(date,c,x)=>{ const e=agg[date]||{c:0,x:0}; e.c+=c; e.x+=x; agg[date]=e; };
+  Object.keys(log).forEach(k=>{ const e=dayTotal(log[k]); add(k,e.c,e.x); });
+  allWords().forEach(o=>{ const pr=o.word.pr; if(!pr) return; Object.keys(pr).forEach(date=>{ const e=pr[date]; add(date,(e&&e.c)||0,(e&&e.x)||0); }); });
+  return agg;
+}
+// 逐字練習紀錄：依日期分組（新→舊），每組列出該日練過的字
+function practiceRecords(){
+  const byDate={};
+  allWords().forEach(o=>{
+    const pr=o.word.pr; if(!pr) return;
+    Object.keys(pr).forEach(date=>{
+      const e=pr[date], c=(e&&e.c)||0, x=(e&&e.x)||0; if(!(c||x)) return;
+      (byDate[date]=byDate[date]||[]).push({w:o.word.w, c, x, n:c+x});
+    });
+  });
+  return Object.keys(byDate).sort().reverse().map(date=>({date, items:byDate[date].sort((a,b)=>b.n-a.n)}));
 }
 function key(d,id){ return "d"+d+":"+id; }
 
@@ -539,8 +563,8 @@ function libCounts(){
   return {learning, due, done};
 }
 function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
-function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(true);  saveVocab(); renderAll(); }
-function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false); saveVocab(); renderAll(); }
+function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(true, w);  saveVocab(); renderAll(); }
+function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false, w); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
 function addLibWord(wv, mv, exv, nv){
   const hit=findWordGlobal(wv);
@@ -677,15 +701,16 @@ function wireQuiz(root){
         const val=(inp?inp.value:'').trim();
         quiz.lastCorrect = val.toLowerCase()===String(it.w).trim().toLowerCase();
         if(quiz.lastCorrect) quiz.correct++;
-        quiz.answered=true; bumpPractice(quiz.lastCorrect); renderLibPage(); return;
+        const h1=findWordGlobal(it.w); if(h1) bumpPractice(quiz.lastCorrect, h1.word);
+        quiz.answered=true; saveVocab(); renderLibPage(); return;
       }
       if(a==="opt"){
         if(quiz.answered) return;
         quiz.chosen=el.getAttribute("data-opt");
         quiz.lastCorrect = quiz.chosen===it.m;
         if(quiz.lastCorrect) quiz.correct++;
-        bumpPractice(quiz.lastCorrect);
-        quiz.answered=true; renderLibPage(); return;
+        const h2=findWordGlobal(it.w); if(h2) bumpPractice(quiz.lastCorrect, h2.word);
+        quiz.answered=true; saveVocab(); renderLibPage(); return;
       }
     };
   });
@@ -693,15 +718,15 @@ function wireQuiz(root){
   if(inp){ inp.focus(); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ const b=root.querySelector('[data-quiz="submit"]'); if(b) b.click(); } }); }
 }
 
-// 近 N 天的練習紀錄（含今天，舊→新）
-function recentLog(days){
+// 近 N 天的練習紀錄（含今天，舊→新），數據來自每日總計 agg
+function recentLog(days, agg){
   const out=[];
   for(let i=days-1;i>=0;i--){
     const d=todayMid(); d.setDate(d.getDate()-i);
     const m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
     const iso=d.getFullYear()+"-"+m+"-"+dd;
-    const e=dayTotal(log[iso]);
-    out.push({iso, md:(+m)+"/"+(+dd), c:e.c, x:e.x, n:e.n, isToday:i===0});
+    const e=agg[iso]||{c:0,x:0}, cc=e.c||0, xx=e.x||0;
+    out.push({iso, md:(+m)+"/"+(+dd), c:cc, x:xx, n:cc+xx, isToday:i===0});
   }
   return out;
 }
@@ -718,11 +743,12 @@ function renderLibPage(){
     +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
     +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
 
-  // 練習紀錄面板（每日練習：對／錯）
-  const recent=recentLog(14);
-  let totC=0, totX=0; Object.keys(log).forEach(k=>{ const e=dayTotal(log[k]); totC+=e.c; totX+=e.x; });
+  // 練習紀錄面板（每日練習：對／錯）— 由逐字 pr 加總
+  const agg=dailyAgg();
+  const recent=recentLog(14, agg);
+  let totC=0, totX=0; Object.keys(agg).forEach(k=>{ totC+=agg[k].c||0; totX+=agg[k].x||0; });
   const totN=totC+totX, acc = totN ? Math.round(totC/totN*100) : 0;
-  const t=dayTotal(log[todayISO()]);
+  const tAgg=agg[todayISO()]||{c:0,x:0}; const t={c:tAgg.c||0, x:tAgg.x||0, n:(tAgg.c||0)+(tAgg.x||0)};
   const maxN=Math.max(1,...recent.map(d=>d.n));
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>練習紀錄</h3>';
   html+='<div class="rec-top">'
@@ -744,6 +770,25 @@ function renderLibPage(){
       +'<div class="rec-x'+cls+'">'+d.md+'</div></div>';
   }).join('')+'</div>';
   html+='<div class="rec-legend"><span class="lg right"></span>答對 <span class="lg wrong"></span>答錯 · 測驗作答與「記得／忘了」都計入</div>';
+  html+='</div>';
+
+  // 逐字練習紀錄（依日期分組，新→舊）
+  const recs=practiceRecords();
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>逐字練習紀錄</h3>';
+  if(!recs.length){
+    html+='<div class="lp-empty">還沒有逐字紀錄。做測驗、或按「記得／忘了」後，每個字的對錯會記在這裡。</div>';
+  } else {
+    recs.slice(0,30).forEach(g=>{
+      const p=g.date.split("-");
+      html+='<div class="pr-group"><div class="pr-date">'+(+p[1])+'/'+(+p[2])+'</div>';
+      g.items.forEach(it=>{
+        html+='<div class="pr-row"><span class="pr-w">'+esc(it.w)+'</span>'
+          +'<span class="pr-stat">練習 '+it.n+' · <b class="ok">對 '+it.c+'</b> · <b class="no">錯 '+it.x+'</b></span></div>';
+      });
+      html+='</div>';
+    });
+    if(recs.length>30) html+='<div class="lib-cardnote">只顯示最近 30 天。</div>';
+  }
   html+='</div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
