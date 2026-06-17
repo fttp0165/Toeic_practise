@@ -154,6 +154,8 @@
   .ventry{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
   .ventry input{font:inherit;font-size:14.5px;border:1px solid var(--line-strong);border-radius:9px;padding:10px 12px;background:#FBFCFB;color:var(--ink);}
   .ventry input:focus{outline:none;border-color:var(--lock);box-shadow:0 0 0 2px var(--lock-soft);}
+  .vmsg{font-size:12.5px;color:var(--due);font-weight:600;min-height:16px;}
+  .vmsg:empty{display:none;}
   .vaddbtn{align-self:flex-start;background:var(--lock);color:#fff;border:none;border-radius:9px;padding:10px 20px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;}
   .vaddbtn:active{transform:translateY(1px);}
   .vrow{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px dashed var(--line);}
@@ -368,6 +370,33 @@ let vocab={};
 try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
 let viewing = 1;
 
+/* ---------- vocab library: migration + lookup ---------- */
+// 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
+function migrateVocab(v){
+  if(!v || typeof v!=="object") return {};
+  Object.keys(v).forEach(day=>{
+    const arr=v[day]; if(!Array.isArray(arr)) return;
+    arr.forEach(w=>{
+      if(!Array.isArray(w.exs)) w.exs = (w.ex && String(w.ex).trim()) ? [String(w.ex).trim()] : [];
+      if("ex" in w) delete w.ex;
+    });
+  });
+  return v;
+}
+// 整個單字庫跨所有天找同一個字（trim + 不分大小寫）
+function findWordGlobal(word){
+  const key=String(word||"").trim().toLowerCase();
+  if(!key) return null;
+  for(const day of Object.keys(vocab)){
+    const arr=vocab[day]; if(!Array.isArray(arr)) continue;
+    for(let i=0;i<arr.length;i++){
+      if(String(arr[i].w||"").trim().toLowerCase()===key) return {day:+day, idx:i, word:arr[i]};
+    }
+  }
+  return null;
+}
+migrateVocab(vocab);
+
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
 function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab}); }
@@ -433,7 +462,7 @@ function flipCardsHTML(srcDay){
   return words.map((w,i)=>
     '<div class="flip" data-flip="'+srcDay+'-'+i+'">'
     +'<div class="fw">'+esc(w.w)+'</div>'
-    +(w.ex?'<div class="fex">'+esc(w.ex)+'</div>':'')
+    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
     +'<div class="hintr">點按看意思</div></div>'
@@ -518,13 +547,14 @@ function renderDay(){
       +'<input id="vm" placeholder="中文意思 (例 合規 / 法規遵循)" autocomplete="off">'
       +'<input id="vex" placeholder="例句（可留空）" autocomplete="off">'
       +'<input id="vn" placeholder="備註（可留空，例 工作常用 / 易混淆）" autocomplete="off">'
-      +'<button class="vaddbtn" id="vadd">加入這個字</button></div>';
+      +'<button class="vaddbtn" id="vadd">加入這個字</button>'
+      +'<div class="vmsg" id="vmsg"></div></div>';
     if(words.length){
       html+='<div class="vlist">';
       words.forEach((w,i)=>{
         html+='<div class="vrow"><div class="vbody">'
           +'<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
-          +(w.ex?'<div class="vex">'+esc(w.ex)+'</div>':'')
+          +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="vex">'+esc(e)+'</div>').join(''):'')
           +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'')
           +'</div><button class="vdel" data-i="'+i+'" title="刪除">✕</button></div>';
       });
@@ -560,10 +590,24 @@ function renderDay(){
       const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex"), nEl=area.querySelector("#vn");
       const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim(), n=nEl.value.trim();
       if(!w){ wEl.focus(); return; }
-      if(!vocab[d]) vocab[d]=[];
-      vocab[d].push({w,m,ex,n});
+      let msg="";
+      const hit=findWordGlobal(w);
+      if(hit){
+        // 已在單字庫 → 不重複建立；不同例句就補進同一個字
+        const wd=hit.word;
+        const dup = ex && wd.exs.some(e=>e.trim().toLowerCase()===ex.toLowerCase());
+        let added=false;
+        if(ex && !dup){ wd.exs.push(ex); added=true; }
+        if(m && !wd.m) wd.m=m;          // 補上原本沒填的意思
+        if(n && !wd.n) wd.n=n;          // 補上原本沒填的備註
+        msg="「"+w+"」已在第 "+hit.day+" 批"+(added?"，已新增例句":"（未重複建立）");
+      } else {
+        if(!vocab[d]) vocab[d]=[];
+        vocab[d].push({w, m, exs: ex?[ex]:[], n});
+      }
       saveVocab(); renderAll();
-      // refocus the word field for fast entry
+      // 顯示提示 + 重新聚焦單字欄，方便連續輸入
+      const msgEl=document.querySelector("#vmsg"); if(msgEl) msgEl.textContent=msg;
       const nw=document.querySelector("#vw"); if(nw) nw.focus();
     };
     addBtn.onclick=commit;
@@ -644,6 +688,7 @@ window.TOEIC = {
     startDate = (data && data.start) ? data.start : "";
     done      = (data && data.tasks) ? data.tasks : {};
     vocab     = (data && data.vocab) ? data.vocab : {};
+    migrateVocab(vocab);
     localStorage.setItem(LS.start, startDate);
     localStorage.setItem(LS.tasks, JSON.stringify(done));
     localStorage.setItem(LS.vocab, JSON.stringify(vocab));
