@@ -43,7 +43,7 @@ if(firebaseConfig.apiKey.startsWith("PASTE")){
     if(x && typeof x==="object") return "{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+stable(x[k])).join(",")+"}";
     return JSON.stringify(x===undefined?null:x);
   }
-  function norm(d){ return { start:(d&&d.start)||"", tasks:(d&&d.tasks)||{}, vocab:(d&&d.vocab)||{} }; }
+  function norm(d){ return { start:(d&&d.start)||"", tasks:(d&&d.tasks)||{}, vocab:(d&&d.vocab)||{}, log:(d&&d.log)||{} }; }
 
   authBtn.onclick = () => {
     if(auth.currentUser){

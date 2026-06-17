@@ -1,6 +1,6 @@
 "use strict";
 const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
-const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab"};
+const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log"};
 
 /* ---------- phases ---------- */
 function phaseOf(d){
@@ -62,6 +62,8 @@ let done = {};
 try{ done = JSON.parse(localStorage.getItem(LS.tasks)||"{}"); }catch(e){ done={}; }
 let vocab={};
 try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
+let log={};   // 練習紀錄 { "YYYY-MM-DD": 次數 }
+try{ log = JSON.parse(localStorage.getItem(LS.log)||"{}"); }catch(e){ log={}; }
 let viewing = 1;
 let editing = null;     // "day:idx" 正在編輯的單字，或 null
 let libOpen = false;    // 單字庫卡片是否展開
@@ -187,10 +189,13 @@ function wireWordControls(root){
 
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
-function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab}); }
+function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log}); }
 
 function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); notifyChange(); }
 function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); notifyChange(); }
+function saveLog(){ localStorage.setItem(LS.log, JSON.stringify(log)); notifyChange(); }
+// 練習一個單字（測驗作答 / 記得 / 忘了）→ 今天 +1
+function bumpPractice(){ const d=todayISO(); log[d]=(log[d]||0)+1; saveLog(); }
 function key(d,id){ return "d"+d+":"+id; }
 
 function todayDay(){
@@ -526,8 +531,8 @@ function libCounts(){
   return {learning, due, done};
 }
 function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
-function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; saveVocab(); renderAll(); }
-function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
+function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(); saveVocab(); renderAll(); }
+function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
 function addLibWord(wv, mv, exv, nv){
   const hit=findWordGlobal(wv);
@@ -613,7 +618,7 @@ function startQuiz(date){
     }
     return { w:String(w.w), m:String(w.m), type, options: type==='choice'?options:null };
   });
-  quiz = { items, i:0, correct:0, answered:false, lastCorrect:null, chosen:null };
+  quiz = { date, items, i:0, correct:0, answered:false, lastCorrect:null, chosen:null };
   renderLibPage();
 }
 function quizHTML(){
@@ -656,7 +661,7 @@ function wireQuiz(root){
     el.onclick=()=>{
       const a=el.getAttribute("data-quiz");
       if(a==="exit"){ quiz=null; renderLibPage(); return; }
-      if(a==="again"){ startQuiz(); return; }
+      if(a==="again"){ startQuiz(quiz.date); return; }
       if(a==="next"){ quiz.i++; quiz.answered=false; quiz.chosen=null; renderLibPage(); return; }
       const it=quiz.items[quiz.i];
       if(a==="submit"){
@@ -664,13 +669,14 @@ function wireQuiz(root){
         const val=(inp?inp.value:'').trim();
         quiz.lastCorrect = val.toLowerCase()===String(it.w).trim().toLowerCase();
         if(quiz.lastCorrect) quiz.correct++;
-        quiz.answered=true; renderLibPage(); return;
+        quiz.answered=true; bumpPractice(); renderLibPage(); return;
       }
       if(a==="opt"){
         if(quiz.answered) return;
         quiz.chosen=el.getAttribute("data-opt");
         quiz.lastCorrect = quiz.chosen===it.m;
         if(quiz.lastCorrect) quiz.correct++;
+        bumpPractice();
         quiz.answered=true; renderLibPage(); return;
       }
     };
@@ -679,6 +685,17 @@ function wireQuiz(root){
   if(inp){ inp.focus(); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ const b=root.querySelector('[data-quiz="submit"]'); if(b) b.click(); } }); }
 }
 
+// 近 N 天的練習紀錄（含今天，舊→新）
+function recentLog(days){
+  const out=[];
+  for(let i=days-1;i>=0;i--){
+    const d=todayMid(); d.setDate(d.getDate()-i);
+    const m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
+    const iso=d.getFullYear()+"-"+m+"-"+dd;
+    out.push({iso, md:(+m)+"/"+(+dd), count:log[iso]||0, isToday:i===0});
+  }
+  return out;
+}
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
   if(quiz){ root.innerHTML=quizHTML(); wireQuiz(root); return; }   // 測驗中：全頁顯示測驗
@@ -691,6 +708,23 @@ function renderLibPage(){
     +'<div class="lp-stat"><div class="num">'+c.learning+'</div><div class="lab">學習中</div></div>'
     +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
     +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
+
+  // 練習紀錄面板（每日練習單字次數）
+  const recent=recentLog(14);
+  const totalPractice=Object.keys(log).reduce((a,k)=>a+(+log[k]||0),0);
+  const todayCount=log[todayISO()]||0;
+  const maxC=Math.max(1,...recent.map(d=>d.count));
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>練習紀錄</h3>';
+  html+='<div class="rec-top"><div><span class="rec-big">'+todayCount+'</span><span class="rec-lab">今天練習</span></div>'
+    +'<div><span class="rec-big">'+totalPractice+'</span><span class="rec-lab">累計練習</span></div></div>';
+  html+='<div class="rec-chart">'+recent.map(d=>{
+    const h = d.count ? Math.max(8, Math.round(d.count/maxC*100)) : 0;
+    return '<div class="rec-col"><div class="rec-bararea"><div class="rec-bar'+(d.isToday?' today':'')+(d.count?'':' empty')+'"'
+      +(d.count?' style="height:'+h+'%"':'')+' title="'+d.iso+'：'+d.count+' 次"></div></div>'
+      +'<div class="rec-x'+(d.isToday?' today':'')+'">'+d.md+'</div></div>';
+  }).join('')+'</div>';
+  html+='<div class="lib-cardnote">每天測驗作答或按「記得／忘了」都會 +1。</div>';
+  html+='</div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
   if(due.length){
@@ -804,19 +838,21 @@ if(resetBtn){
 
 /* ---------- bridge for the cloud sync layer (sync.js) ---------- */
 window.TOEIC = {
-  getLocal(){ return {start:startDate, tasks:done, vocab:vocab}; },
+  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log}; },
   isLocalEmpty(){
-    return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0;
+    return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
   },
   setOnChange(fn){ onChange = fn; },
   applyRemote(data){
     startDate = (data && data.start) ? data.start : "";
     done      = (data && data.tasks) ? data.tasks : {};
     vocab     = (data && data.vocab) ? data.vocab : {};
+    log       = (data && data.log) ? data.log : {};
     migrateVocab(vocab);
     localStorage.setItem(LS.start, startDate);
     localStorage.setItem(LS.tasks, JSON.stringify(done));
     localStorage.setItem(LS.vocab, JSON.stringify(vocab));
+    localStorage.setItem(LS.log, JSON.stringify(log));
     if(startInput) startInput.value = startDate;
     const td = todayDay();
     viewing = (td && td!==0 && td!==99) ? td : (viewing || 1);
