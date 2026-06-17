@@ -70,6 +70,7 @@ let libQuery = "";      // 單字庫搜尋字串
 let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
 let quiz = null;        // 測驗中的 session（null = 未測驗）
+let quizDate = "";      // 測驗選的學習日期（""＝預設今天/最近）
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -582,8 +583,24 @@ function libFlipCardHTML(day, w){
 }
 /* ---------- 測驗模式（考單字庫「今天要複習」的到期字，混合出題） ---------- */
 function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
-function startQuiz(){
-  const pool = libDue().map(o=>o.word).filter(w=>String(w.w||'').trim() && String(w.m||'').trim());
+// 有學習日期(lo)且 w/m 皆填的字，依日期分組計數（新到舊）
+function learnDates(){
+  const map={};
+  allWords().forEach(o=>{ const w=o.word; if(w.lo && String(w.w||'').trim() && String(w.m||'').trim()) map[w.lo]=(map[w.lo]||0)+1; });
+  return Object.keys(map).sort().reverse().map(d=>({date:d, count:map[d]}));
+}
+function quizPool(date){
+  return allWords().map(o=>o.word).filter(w=>w.lo===date && String(w.w||'').trim() && String(w.m||'').trim());
+}
+// 預設測驗日期：選過就用選的；否則今天(若今天有學)否則最近一天
+function quizDefaultDate(){
+  const dates=learnDates(); if(!dates.length) return "";
+  if(quizDate && dates.some(d=>d.date===quizDate)) return quizDate;
+  const today=todayISO();
+  return dates.some(d=>d.date===today) ? today : dates[0].date;
+}
+function startQuiz(date){
+  const pool = quizPool(date);
   if(!pool.length) return;
   const meanings = Array.from(new Set(allWords().map(o=>String(o.word.m||'').trim()).filter(Boolean)));
   const items = shuffle(pool).map(w=>{
@@ -677,11 +694,27 @@ function renderLibPage(){
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
   if(due.length){
-    html+='<button class="vaddbtn quiz-start" data-quiz-start="1">📝 開始測驗（'+due.length+' 字）</button>';
     html+='<div class="lib-cardnote">先回想中文，點開驗證，再選「記得／忘了」。</div><div class="lib-cards">';
     due.forEach(o=>{ html+=libReviewCardHTML(o.day, o.idx, o.word); });
     html+='</div>';
   } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
+  html+='</div>';
+
+  // 測驗（依學習日期選一組字考）
+  const qdates=learnDates();
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>單字測驗</h3>';
+  if(qdates.length){
+    const today=todayISO(), sel=quizDefaultDate();
+    const selCount=(qdates.find(d=>d.date===sel)||{}).count||0;
+    html+='<div class="quiz-pick"><label for="quizDate">學習日期</label><select id="quizDate">';
+    qdates.forEach(d=>{
+      html+='<option value="'+d.date+'"'+(d.date===sel?' selected':'')+'>'+d.date+(d.date===today?'（今天）':'')+' · '+d.count+' 字</option>';
+    });
+    html+='</select><button class="vaddbtn" data-quiz-start="1">📝 開始測驗（'+selCount+' 字）</button></div>';
+    html+='<div class="lib-cardnote">考所選日期學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
+  } else {
+    html+='<div class="lp-empty">還沒有開始學習的單字。把字選為「今天新學」或新增單字後就能測驗。</div>';
+  }
   html+='</div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>新增單字進單字庫</h3>'
@@ -719,7 +752,8 @@ function renderLibPage(){
   root.querySelectorAll("[data-revyes]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revyes").split(":"); reviewYes(p[0],+p[1]); }; });
   root.querySelectorAll("[data-revno]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revno").split(":"); reviewNo(p[0],+p[1]); }; });
   root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
-  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>startQuiz();
+  const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
+  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();

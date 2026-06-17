@@ -234,7 +234,10 @@
   .lp-empty{font-size:13px;color:var(--muted);padding:6px 0;}
 
   /* ---------- vocab quiz ---------- */
-  .quiz-start{margin-bottom:12px;}
+  .quiz-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .quiz-pick label{font-size:12.5px;color:var(--muted);font-weight:700;}
+  .quiz-pick select{font:inherit;font-size:14px;border:1px solid var(--line-strong);border-radius:9px;padding:8px 10px;background:#FBFCFB;color:var(--ink);}
+  .quiz-pick .vaddbtn{margin-left:auto;}
   .quiz-top{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px;}
   .quiz-top .quiz-exit{margin-left:auto;}
   .quiz-exit{background:none;border:1px solid var(--line-strong);border-radius:8px;padding:5px 12px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer;}
