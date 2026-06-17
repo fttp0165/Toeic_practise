@@ -202,6 +202,43 @@
   .lib-cards .flip{margin-bottom:0;position:relative;}
   .flip-batch{position:absolute;top:8px;right:10px;font-size:9.5px;font-weight:700;color:var(--faint);}
 
+  /* ---------- top tabs ---------- */
+  .tabs{display:flex;gap:6px;margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;box-shadow:var(--shadow);}
+  .tab{flex:1;background:none;border:none;border-radius:9px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.12s;}
+  .tab.on{background:var(--lock);color:#fff;}
+
+  /* ---------- library page ---------- */
+  .lp-intro{margin-top:14px;}
+  .lp-intro h2{font-size:19px;font-weight:800;margin:2px 0 3px;letter-spacing:-.01em;}
+  .lp-intro .sub{color:var(--muted);font-size:13px;}
+  .lp-stats{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .lp-stat{flex:1;min-width:88px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:11px 13px;}
+  .lp-stat .num{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;}
+  .lp-stat .lab{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px;}
+  .lp-stat.due .num{color:var(--due);}
+  .lp-stat.done .num{color:var(--lock);}
+  .lp-sec{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-top:14px;padding:18px 20px;}
+  .lp-sec h3{font-size:13px;font-weight:800;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .lp-sec h3 .dot{width:8px;height:8px;border-radius:50%;}
+
+  /* review flip-card action buttons */
+  .librev .rev-acts{display:none;gap:8px;margin-top:10px;}
+  .librev.shown .rev-acts{display:flex;}
+  .rev-yes,.rev-no{flex:1;border:none;border-radius:8px;padding:8px 10px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+  .rev-yes{background:var(--lock);color:#fff;}
+  .rev-no{background:var(--due-soft);color:var(--due);border:1px solid var(--due-ring);}
+
+  /* library row status + learn button */
+  .lib-rowfoot{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+  .st{font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 9px;}
+  .st-new{background:var(--bg);color:var(--faint);}
+  .st-learn{background:var(--lock-soft);color:var(--lock);}
+  .st-due{background:var(--due-soft);color:var(--due);}
+  .st-done{background:var(--lock);color:#fff;}
+  .vlearn{background:none;border:1px solid var(--lock-ring);color:var(--lock);border-radius:8px;padding:5px 9px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1;}
+  .vlearn:hover{background:var(--lock-soft);}
+  .lp-empty{font-size:13px;color:var(--muted);padding:6px 0;}
+
   /* ---------- checklist ---------- */
   .task{
     display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px dashed var(--line);cursor:pointer;
@@ -286,6 +323,12 @@
     <span class="syncstatus" id="syncStatus">未登入 · 進度只存在本機</span>
   </div>
 
+  <nav class="tabs">
+    <button class="tab on" id="tabSprint">20 天衝刺</button>
+    <button class="tab" id="tabLib">海馬迴單字庫</button>
+  </nav>
+
+  <div id="sprintView">
   <div class="setup">
     <label for="start">開始日（Day 1）</label>
     <input type="date" id="start">
@@ -333,6 +376,15 @@
   <div class="foot">
     未登入時進度只存在本機瀏覽器；用 Google 登入後自動同步到雲端、換裝置也不怕。<br>
     不要追求看懂每一題，要追求拿到該拿的分。
+  </div>
+  </div><!-- /#sprintView -->
+
+  <div id="libPageView" hidden>
+    <div id="libPageArea"></div>
+    <div class="foot">
+      海馬迴單字庫與 20 天衝刺<b>共用同一池單字</b>，但複習排程獨立、依真實日期。<br>
+      把字選為「今天新學」，之後 +1／+3／+7／+14 天會自動排進複習。
+    </div>
   </div>
 </div>
 
@@ -406,6 +458,8 @@ let editing = null;     // "day:idx" 正在編輯的單字，或 null
 let libOpen = false;    // 單字庫卡片是否展開
 let libMode = "list";   // "list" | "cards"
 let libQuery = "";      // 單字庫搜尋字串
+let view = localStorage.getItem("toeic20_view") || "sprint"; // "sprint" | "lib"
+let lpQuery = "";       // 單字庫頁面的搜尋字串
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -427,7 +481,7 @@ function findWordGlobal(word){
   for(const day of Object.keys(vocab)){
     const arr=vocab[day]; if(!Array.isArray(arr)) continue;
     for(let i=0;i<arr.length;i++){
-      if(String(arr[i].w||"").trim().toLowerCase()===key) return {day:+day, idx:i, word:arr[i]};
+      if(String(arr[i].w||"").trim().toLowerCase()===key) return {day, idx:i, word:arr[i]};
     }
   }
   return null;
@@ -437,11 +491,16 @@ migrateVocab(vocab);
 /* ---------- shared vocab word helpers (used by day list + library) ---------- */
 function allWords(){
   const out=[];
-  Object.keys(vocab).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b).forEach(day=>{
-    (vocab[day]||[]).forEach((w,idx)=>out.push({day, idx, word:w}));
+  const keys=Object.keys(vocab);
+  const nums=keys.filter(k=>/^\d+$/.test(k)).sort((a,b)=>(+a)-(+b));
+  const rest=keys.filter(k=>!/^\d+$/.test(k));   // 非數字桶（單字庫專屬：lib）
+  nums.concat(rest).forEach(day=>{
+    if(Array.isArray(vocab[day])) vocab[day].forEach((w,idx)=>out.push({day, idx, word:w}));
   });
   return out;
 }
+// 顯示批次標籤：數字 = 第 N 批；lib = 單字庫
+function groupLabel(key){ return String(key)==="lib" ? "單字庫" : ("第 "+key+" 批"); }
 function wordBodyHTML(w){
   return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
     +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="vex">'+esc(e)+'</div>').join(''):'')
@@ -463,7 +522,7 @@ function wordRowHTML(day, idx, w, showBatch){
   const k=day+":"+idx;
   if(editing===k) return '<div class="vrow">'+wordEditFormHTML(day,idx)+'</div>';
   return '<div class="vrow"><div class="vbody">'+wordBodyHTML(w)
-    +(showBatch?'<div class="vbatch">第 '+day+' 批</div>':'')
+    +(showBatch?'<div class="vbatch">'+groupLabel(day)+'</div>':'')
     +'</div><div class="vacts">'
     +'<button class="vedit" data-edit="'+k+'" title="編輯">✏️</button>'
     +'<button class="vdel" data-del="'+k+'" title="刪除">✕</button></div></div>';
@@ -477,7 +536,7 @@ function deleteWord(day, idx){
   saveVocab(); renderAll();
 }
 function saveWordEdit(form){
-  const parts=form.dataset.k.split(":"); const day=+parts[0], idx=+parts[1];
+  const parts=form.dataset.k.split(":"); const day=parts[0], idx=+parts[1];
   const arr=vocab[day]; if(!arr||!arr[idx]) { editing=null; renderAll(); return; }
   const nw=form.querySelector(".we-w").value.trim();
   const nm=form.querySelector(".we-m").value.trim();
@@ -487,7 +546,7 @@ function saveWordEdit(form){
   // 改名若撞到「別的」既有單字 → 擋下，避免破壞單字庫去重
   const hit=findWordGlobal(nw);
   if(hit && !(hit.day===day && hit.idx===idx)){
-    msgEl.textContent="單字庫已有「"+nw+"」（在第 "+hit.day+" 批）"; return;
+    msgEl.textContent="單字庫已有「"+nw+"」（在"+groupLabel(hit.day)+"）"; return;
   }
   // 例句：一行一句，trim、去空行、去重（不分大小寫，保留順序）
   const seen=new Set(), exs=[];
@@ -495,7 +554,8 @@ function saveWordEdit(form){
     const e=line.trim(); if(!e) return;
     const lk=e.toLowerCase(); if(seen.has(lk)) return; seen.add(lk); exs.push(e);
   });
-  arr[idx]={w:nw, m:nm, exs:exs, n:nn};
+  // 保留 lo/ri 等其他欄位（單字庫學習進度），只更新可編輯欄位
+  arr[idx]=Object.assign({}, arr[idx], {w:nw, m:nm, exs:exs, n:nn});
   editing=null;
   saveVocab(); renderAll();
 }
@@ -505,7 +565,7 @@ function wireWordControls(root){
     el.onclick=e=>{ e.stopPropagation(); editing=el.getAttribute("data-edit"); renderAll(); };
   });
   root.querySelectorAll("[data-del]").forEach(el=>{
-    el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-del").split(":"); deleteWord(+p[0],+p[1]); };
+    el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-del").split(":"); deleteWord(p[0],+p[1]); };
   });
   root.querySelectorAll(".wedit").forEach(form=>{
     form.querySelector(".we-save").onclick=()=>saveWordEdit(form);
@@ -709,7 +769,7 @@ function renderDay(){
         if(ex && !dup){ wd.exs.push(ex); added=true; }
         if(m && !wd.m) wd.m=m;          // 補上原本沒填的意思
         if(n && !wd.n) wd.n=n;          // 補上原本沒填的備註
-        msg="「"+w+"」已在第 "+hit.day+" 批"+(added?"，已新增例句":"（未重複建立）");
+        msg="「"+w+"」已在"+groupLabel(hit.day)+(added?"，已新增例句":"（未重複建立）");
       } else {
         if(!vocab[d]) vocab[d]=[];
         vocab[d].push({w, m, exs: ex?[ex]:[], n});
@@ -827,7 +887,157 @@ function renderProgress(){
   }
 }
 
-function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); }
+/* ---------- 海馬迴單字庫頁面（獨立真實日期 SRS，共用單字池） ---------- */
+function todayMid(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+function todayISO(){ const d=todayMid(); const m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0"); return d.getFullYear()+"-"+m+"-"+day; }
+function isoMid(iso){ const d=new Date(iso+"T00:00:00"); d.setHours(0,0,0,0); return d; }
+function daysSinceISO(iso){ return Math.floor((todayMid()-isoMid(iso))/86400000); }
+
+// 單字庫 SRS 狀態：lo=開始學習日(YYYY-MM-DD)，ri=已完成的間隔階段(0..4)
+function libStatus(w){
+  if(!w.lo) return {key:"new", label:"未學"};
+  const ri=w.ri||0;
+  if(ri>=INTERVALS.length) return {key:"done", label:"已熟記"};
+  const ds=daysSinceISO(w.lo), need=INTERVALS[ri];
+  if(ds>=need) return {key:"due", label:"待複習"};
+  return {key:"learn", label:(need-ds)+" 天後複習"};
+}
+function libDue(){ return allWords().filter(o=>libStatus(o.word).key==="due"); }
+function libCounts(){
+  let learning=0, due=0, done=0;
+  allWords().forEach(o=>{
+    const w=o.word; if(!w.lo) return;
+    const s=libStatus(w).key;
+    if(s==="done") done++; else { learning++; if(s==="due") due++; }
+  });
+  return {learning, due, done};
+}
+function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
+function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; saveVocab(); renderAll(); }
+function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
+// 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
+function addLibWord(wv, mv, exv, nv){
+  const hit=findWordGlobal(wv);
+  if(hit){
+    const wd=hit.word;
+    const dup = exv && (wd.exs||[]).some(e=>e.trim().toLowerCase()===exv.toLowerCase());
+    let added=false;
+    if(exv && !dup){ (wd.exs=wd.exs||[]).push(exv); added=true; }
+    if(mv && !wd.m) wd.m=mv;
+    if(nv && !wd.n) wd.n=nv;
+    wd.lo=todayISO(); wd.ri=0;
+    saveVocab(); renderAll();
+    return "「"+wv+"」已在"+groupLabel(hit.day)+"，已設為今天新學"+(added?"並新增例句":"");
+  }
+  if(!Array.isArray(vocab.lib)) vocab.lib=[];
+  vocab.lib.push({w:wv, m:mv, exs: exv?[exv]:[], n:nv, lo:todayISO(), ri:0});
+  saveVocab(); renderAll();
+  return "";
+}
+function libReviewCardHTML(day, idx, w){
+  const k=day+":"+idx, ri=w.ri||0;
+  return '<div class="flip librev">'
+    +'<div class="fw">'+esc(w.w)+'</div>'
+    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+    +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
+    +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
+    +'<div class="hintr">點按看意思</div>'
+    +'<div class="rev-acts"><button class="rev-yes" data-revyes="'+k+'">記得 ✓</button>'
+    +'<button class="rev-no" data-revno="'+k+'">忘了 ✕</button></div>'
+    +'<span class="flip-batch">第 '+(ri+1)+' 次複習</span></div>';
+}
+function libRowHTML(day, idx, w){
+  const k=day+":"+idx;
+  if(editing===k) return '<div class="vrow">'+wordEditFormHTML(day,idx)+'</div>';
+  const st=libStatus(w);
+  return '<div class="vrow"><div class="vbody">'+wordBodyHTML(w)
+    +'<div class="lib-rowfoot"><span class="st st-'+st.key+'">'+st.label+'</span>'
+    +'<span class="vbatch">'+groupLabel(day)+'</span></div>'
+    +'</div><div class="vacts">'
+    +'<button class="vlearn" data-learn="'+k+'" title="設為今天新學">今天新學</button>'
+    +'<button class="vedit" data-edit="'+k+'" title="編輯">✏️</button>'
+    +'<button class="vdel" data-del="'+k+'" title="刪除">✕</button></div></div>';
+}
+function renderLibPage(){
+  const root=$("#libPageArea"); if(!root) return;
+  const all=allWords(), c=libCounts(), due=libDue();
+
+  let html='<div class="lp-intro"><div class="kicker">海馬迴間隔複習</div>'
+    +'<h2>單字庫</h2><div class="sub">不分天數的長期單字庫 · 依真實日期排 +1／+3／+7／+14 複習</div></div>';
+  html+='<div class="lp-stats">'
+    +'<div class="lp-stat due"><div class="num">'+c.due+'</div><div class="lab">今天要複習</div></div>'
+    +'<div class="lp-stat"><div class="num">'+c.learning+'</div><div class="lab">學習中</div></div>'
+    +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
+    +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
+
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
+  if(due.length){
+    html+='<div class="lib-cardnote">先回想中文，點開驗證，再選「記得／忘了」。</div><div class="lib-cards">';
+    due.forEach(o=>{ html+=libReviewCardHTML(o.day, o.idx, o.word); });
+    html+='</div>';
+  } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
+  html+='</div>';
+
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>新增單字進單字庫</h3>'
+    +'<div class="ventry">'
+    +'<input id="lvw" placeholder="單字" autocomplete="off">'
+    +'<input id="lvm" placeholder="中文意思" autocomplete="off">'
+    +'<input id="lvex" placeholder="例句（可留空）" autocomplete="off">'
+    +'<input id="lvn" placeholder="備註（可留空）" autocomplete="off">'
+    +'<button class="vaddbtn" id="lvadd">加入並開始學習</button>'
+    +'<div class="vmsg" id="lvmsg"></div></div></div>';
+
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>全部單字 · '+all.length+'</h3>'
+    +'<div class="lib-ctrl"><input id="lpSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(lpQuery)+'" autocomplete="off"></div>';
+  const q=lpQuery.trim().toLowerCase();
+  const filtered = q ? all.filter(o=>{
+    const w=o.word;
+    return String(w.w||'').toLowerCase().includes(q) || String(w.m||'').toLowerCase().includes(q)
+      || (w.exs||[]).some(e=>String(e).toLowerCase().includes(q)) || String(w.n||'').toLowerCase().includes(q);
+  }) : all;
+  if(!all.length){ html+='<div class="lp-empty">單字庫還是空的。用上面的「新增單字」開始，或在 20 天衝刺裡輸入的字也會出現在這。</div>'; }
+  else if(!filtered.length){ html+='<div class="lp-empty">找不到符合「'+esc(lpQuery)+'」的單字。</div>'; }
+  else { html+='<div class="lib-list">'; filtered.forEach(o=>{ html+=libRowHTML(o.day, o.idx, o.word); }); html+='</div>'; }
+  html+='</div>';
+
+  root.innerHTML=html;
+
+  wireWordControls(root);
+  root.querySelectorAll("[data-revyes]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revyes").split(":"); reviewYes(p[0],+p[1]); }; });
+  root.querySelectorAll("[data-revno]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revno").split(":"); reviewNo(p[0],+p[1]); }; });
+  root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
+  const s=root.querySelector("#lpSearch");
+  if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
+    const s2=document.querySelector("#lpSearch"); if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length,s2.value.length); } };
+  const addBtn=root.querySelector("#lvadd");
+  if(addBtn){
+    const commit=()=>{
+      const wEl=root.querySelector("#lvw"), mEl=root.querySelector("#lvm"), exEl=root.querySelector("#lvex"), nEl=root.querySelector("#lvn");
+      const wv=wEl.value.trim(), mv=mEl.value.trim(), exv=exEl.value.trim(), nv=nEl.value.trim();
+      if(!wv){ wEl.focus(); return; }
+      const msg=addLibWord(wv,mv,exv,nv);
+      const m2=document.querySelector("#lvmsg"); if(m2) m2.textContent=msg;
+      const nw=document.querySelector("#lvw"); if(nw) nw.focus();
+    };
+    addBtn.onclick=commit;
+    const nEl=root.querySelector("#lvn");
+    if(nEl) nEl.addEventListener("keydown",e=>{ if(e.key==="Enter") commit(); });
+  }
+}
+
+function switchView(v){
+  view=v; localStorage.setItem("toeic20_view", v);
+  $("#sprintView").hidden=(v!=="sprint");
+  $("#libPageView").hidden=(v!=="lib");
+  $("#tabSprint").classList.toggle("on", v==="sprint");
+  $("#tabLib").classList.toggle("on", v==="lib");
+  const h1=document.querySelector("header h1"), sub=document.querySelector("header .sub");
+  if(v==="lib"){ h1.textContent="海馬迴單字庫"; sub.textContent="長期記憶單字庫 · 與 20 天衝刺共用單字"; }
+  else { h1.textContent="TOEIC 20 天衝刺表"; sub.textContent="300 → 500 · 每天主動回想，把單字騙進長期記憶"; }
+  renderAll();
+}
+
+function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");
@@ -872,11 +1082,15 @@ window.TOEIC = {
   }
 };
 
+// 分頁切換
+$("#tabSprint").onclick=()=>switchView("sprint");
+$("#tabLib").onclick=()=>switchView("lib");
+
 // default view = today if started, else day 1
 (function(){
   const td=todayDay();
   viewing = (td && td!==0 && td!==99)? td : 1;
-  renderAll();
+  switchView(view);   // 套用上次的分頁（含初始 hidden 狀態與標題）並 renderAll
 })();
 </script>
 
