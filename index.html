@@ -144,7 +144,10 @@
   .flip .fex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
   .flip .fm{font-size:14px;font-weight:700;color:var(--lock);margin-top:8px;filter:blur(5.5px);transition:filter .15s;user-select:none;}
   .flip .hintr{font-size:10.5px;color:var(--faint);margin-top:5px;}
+  .flip .fn{font-size:11.5px;color:var(--faint);margin-top:5px;line-height:1.4;display:none;}
+  .flip .fn::before{content:"備註 ";font-weight:700;color:var(--due);}
   .flip.shown .fm{filter:none;}
+  .flip.shown .fn{display:block;}
   .flip.shown .hintr{visibility:hidden;}
 
   /* vocab entry */
@@ -160,6 +163,8 @@
   .vhead .vw{font-weight:800;font-size:14.5px;color:var(--ink);}
   .vhead .vm{font-size:13px;font-weight:600;color:var(--lock);}
   .vex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
+  .vn{font-size:11.5px;color:var(--faint);margin-top:3px;line-height:1.4;}
+  .vn::before{content:"備註 ";font-weight:700;color:var(--due);}
   .vdel{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:2px 4px;flex:0 0 auto;line-height:1;}
   .vdel:hover{color:var(--due);}
   .vempty{font-size:12.5px;color:var(--faint);line-height:1.6;}
@@ -430,6 +435,7 @@ function flipCardsHTML(srcDay){
     +'<div class="fw">'+esc(w.w)+'</div>'
     +(w.ex?'<div class="fex">'+esc(w.ex)+'</div>':'')
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
+    +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
     +'<div class="hintr">點按看意思</div></div>'
   ).join("");
 }
@@ -511,6 +517,7 @@ function renderDay(){
       +'<input id="vw" placeholder="單字 (例 compliance)" autocomplete="off">'
       +'<input id="vm" placeholder="中文意思 (例 合規 / 法規遵循)" autocomplete="off">'
       +'<input id="vex" placeholder="例句（可留空）" autocomplete="off">'
+      +'<input id="vn" placeholder="備註（可留空，例 工作常用 / 易混淆）" autocomplete="off">'
       +'<button class="vaddbtn" id="vadd">加入這個字</button></div>';
     if(words.length){
       html+='<div class="vlist">';
@@ -518,6 +525,7 @@ function renderDay(){
         html+='<div class="vrow"><div class="vbody">'
           +'<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
           +(w.ex?'<div class="vex">'+esc(w.ex)+'</div>':'')
+          +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'')
           +'</div><button class="vdel" data-i="'+i+'" title="刪除">✕</button></div>';
       });
       html+='</div>';
@@ -549,18 +557,18 @@ function renderDay(){
   const addBtn=area.querySelector("#vadd");
   if(addBtn){
     const commit=()=>{
-      const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex");
-      const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim();
+      const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex"), nEl=area.querySelector("#vn");
+      const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim(), n=nEl.value.trim();
       if(!w){ wEl.focus(); return; }
       if(!vocab[d]) vocab[d]=[];
-      vocab[d].push({w,m,ex});
+      vocab[d].push({w,m,ex,n});
       saveVocab(); renderAll();
       // refocus the word field for fast entry
       const nw=document.querySelector("#vw"); if(nw) nw.focus();
     };
     addBtn.onclick=commit;
-    const exEl=area.querySelector("#vex");
-    if(exEl) exEl.addEventListener("keydown",e=>{ if(e.key==="Enter") commit(); });
+    const nEl=area.querySelector("#vn");
+    if(nEl) nEl.addEventListener("keydown",e=>{ if(e.key==="Enter") commit(); });
   }
   area.querySelectorAll(".vdel").forEach(el=>{
     el.onclick=()=>{

@@ -73,7 +73,7 @@
 |---|---|---|
 | `toeic20_start` | string | 開始日，格式 `YYYY-MM-DD` |
 | `toeic20_tasks` | object | `{ "d{day}:{taskId}": true }`，只存已完成項 |
-| `toeic20_vocab` | object | `{ "{day}": [ { w, m, ex }, ... ] }`，w=單字 m=中文 ex=例句 |
+| `toeic20_vocab` | object | `{ "{day}": [ { w, m, ex, n }, ... ] }`，w=單字 m=中文 ex=例句 n=備註 |
 
 遷移到帳號版時，這三個結構直接對應後端的資料表 / 文件即可（見 §7）。
 
