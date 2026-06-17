@@ -217,6 +217,19 @@
 
   .foot{text-align:center;font-size:11.5px;color:var(--faint);margin-top:22px;line-height:1.7;}
   .empty{text-align:center;padding:38px 20px;color:var(--muted);font-size:14px;}
+
+  /* ---------- cloud sync bar ---------- */
+  .syncbar{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .authbtn{
+    background:var(--lock);color:#fff;border:none;border-radius:9px;
+    padding:8px 16px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .authbtn:active{transform:translateY(1px);}
+  .authbtn .gmark{width:15px;height:15px;flex:0 0 auto;}
+  .syncstatus{font-size:12px;color:var(--muted);}
+  .syncstatus.ok{color:var(--lock);}
+  .syncstatus.err{color:var(--due);}
 </style>
 </head>
 <body>
@@ -226,6 +239,14 @@
     <h1>TOEIC 20 天衝刺表</h1>
     <div class="sub">300 → 500 · 每天主動回想，把單字騙進長期記憶</div>
   </header>
+
+  <div class="syncbar">
+    <button class="authbtn" id="authBtn">
+      <svg class="gmark" viewBox="0 0 48 48" aria-hidden="true"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 30 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.2 3l6.3-6.3C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
+      用 Google 登入同步
+    </button>
+    <span class="syncstatus" id="syncStatus">未登入 · 進度只存在本機</span>
+  </div>
 
   <div class="setup">
     <label for="start">開始日（Day 1）</label>
@@ -270,7 +291,7 @@
   </details>
 
   <div class="foot">
-    進度只存在這台裝置的瀏覽器（localStorage）。<br>
+    未登入時進度只存在本機瀏覽器；用 Google 登入後自動同步到雲端、換裝置也不怕。<br>
     不要追求看懂每一題，要追求拿到該拿的分。
   </div>
 </div>
@@ -342,8 +363,12 @@ let vocab={};
 try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
 let viewing = 1;
 
-function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); }
-function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); }
+/* sync hook: cloud layer registers a callback to push local edits upstream */
+let onChange = null;
+function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab}); }
+
+function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); notifyChange(); }
+function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); notifyChange(); }
 function key(d,id){ return "d"+d+":"+id; }
 
 function todayDay(){
@@ -585,6 +610,7 @@ if(startDate) startInput.value=startDate;
 startInput.onchange=()=>{
   startDate=startInput.value;
   localStorage.setItem(LS.start,startDate);
+  notifyChange();
   const td=todayDay();
   viewing = (td && td!==0 && td!==99)? td : 1;
   renderAll();
@@ -594,6 +620,28 @@ $("#resetBtn").onclick=()=>{
     localStorage.removeItem(LS.tasks);
     localStorage.removeItem(LS.start);
     done={}; startDate=""; startInput.value=""; viewing=1;
+    notifyChange();
+    renderAll();
+  }
+};
+
+/* ---------- bridge for the cloud sync layer (module script below) ---------- */
+window.TOEIC = {
+  getLocal(){ return {start:startDate, tasks:done, vocab:vocab}; },
+  isLocalEmpty(){
+    return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0;
+  },
+  setOnChange(fn){ onChange = fn; },
+  applyRemote(data){
+    startDate = (data && data.start) ? data.start : "";
+    done      = (data && data.tasks) ? data.tasks : {};
+    vocab     = (data && data.vocab) ? data.vocab : {};
+    localStorage.setItem(LS.start, startDate);
+    localStorage.setItem(LS.tasks, JSON.stringify(done));
+    localStorage.setItem(LS.vocab, JSON.stringify(vocab));
+    if(startInput) startInput.value = startDate;
+    const td = todayDay();
+    viewing = (td && td!==0 && td!==99) ? td : (viewing || 1);
     renderAll();
   }
 };
@@ -604,6 +652,119 @@ $("#resetBtn").onclick=()=>{
   viewing = (td && td!==0 && td!==99)? td : 1;
   renderAll();
 })();
+</script>
+
+<!-- ============================================================
+     雲端同步層（Firebase）— 純靜態 CDN module，無 build。
+     未填 config 時自動退回「純本機模式」，不影響原本功能。
+     ============================================================ -->
+<script type="module">
+const FB_VER = "12.15.0";   // 載入失敗(404)時，改成 Firebase 最新版本號
+
+/* ===================== Firebase 設定（toeicpractise 專案） ===================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDg9dp5HfXCRsawK7mjSL6hXsjOL7OOPWU",
+  authDomain: "toeicpractise.firebaseapp.com",
+  databaseURL: "https://toeicpractise-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "toeicpractise",
+  storageBucket: "toeicpractise.firebasestorage.app",
+  messagingSenderId: "301134134263",
+  appId: "1:301134134263:web:c93a81921da3f336d5ccf2",
+  measurementId: "G-587L5RW9R6"
+};
+/* ============================================================================== */
+
+const authBtn = document.getElementById("authBtn");
+const statusEl = document.getElementById("syncStatus");
+function setStatus(msg, cls){ statusEl.textContent = msg; statusEl.className = "syncstatus" + (cls ? " " + cls : ""); }
+
+// 還沒貼 config → 維持純本機模式（不載入 Firebase，原功能完全不受影響）
+if(firebaseConfig.apiKey.startsWith("PASTE")){
+  setStatus("尚未設定 Firebase · 純本機模式");
+  authBtn.style.display = "none";
+} else {
+  const base = "https://www.gstatic.com/firebasejs/" + FB_VER + "/";
+  const { initializeApp } = await import(base + "firebase-app.js");
+  const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = await import(base + "firebase-auth.js");
+  const { getDatabase, ref: dbRef, get, set, onValue } = await import(base + "firebase-database.js");
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getDatabase(app);
+  const provider = new GoogleAuthProvider();
+
+  let unsub = null;       // RTDB 監聽取消函式
+  let uid = null;         // 目前登入者
+  let writeTimer = null;  // 寫入防抖
+  let lastSent = null;    // 自己剛寫出去的內容（跳過 echo，避免覆蓋使用者正在打的字）
+
+  // 穩定序列化（key 排序）：用來比對「雲端回傳的是不是自己剛寫的那份」
+  function stable(x){
+    if(Array.isArray(x)) return "["+x.map(stable).join(",")+"]";
+    if(x && typeof x==="object") return "{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+stable(x[k])).join(",")+"}";
+    return JSON.stringify(x===undefined?null:x);
+  }
+  function norm(d){ return { start:(d&&d.start)||"", tasks:(d&&d.tasks)||{}, vocab:(d&&d.vocab)||{} }; }
+
+  authBtn.onclick = () => {
+    if(auth.currentUser){
+      signOut(auth);
+    } else {
+      signInWithPopup(auth, provider).catch(err =>
+        setStatus("登入失敗：" + (err.code || err.message || err), "err"));
+    }
+  };
+
+  // 本機任何變更 → 防抖後寫上雲端（登入時才送）
+  window.TOEIC.setOnChange((data) => {
+    if(!uid) return;
+    clearTimeout(writeTimer);
+    writeTimer = setTimeout(() => {
+      const payload = norm(data);
+      lastSent = stable(payload);
+      set(dbRef(db, "users/" + uid), { ...payload, updatedAt: Date.now() })
+        .catch(err => setStatus("同步失敗：" + (err.code || err.message || err), "err"));
+    }, 600);
+  });
+
+  onAuthStateChanged(auth, async (user) => {
+    if(unsub){ unsub(); unsub = null; }
+
+    if(!user){
+      uid = null;
+      authBtn.lastChild.textContent = " 用 Google 登入同步";
+      setStatus("未登入 · 進度只存在本機");
+      return;
+    }
+
+    uid = user.uid;
+    authBtn.lastChild.textContent = " 登出（" + (user.email || "已登入") + "）";
+    setStatus("已登入 · 同步中…");
+
+    const userRef = dbRef(db, "users/" + uid);
+
+    // 首次登入：雲端還沒資料，且本機有資料 → 把本機推上去
+    try{
+      const snap = await get(userRef);
+      if(!snap.exists() && !window.TOEIC.isLocalEmpty()){
+        const payload = norm(window.TOEIC.getLocal());
+        lastSent = stable(payload);
+        await set(userRef, { ...payload, updatedAt: Date.now() });
+      }
+    }catch(e){ /* 離線時略過，交給下面的即時監聽 */ }
+
+    // 即時同步：雲端有變動就套用到畫面（跳過自己剛寫出去的，避免覆蓋輸入）
+    unsub = onValue(userRef,
+      (snap) => {
+        if(!snap.exists()){ setStatus("已登入 · 雲端尚無資料", "ok"); return; }
+        const val = snap.val();
+        if(stable(norm(val)) === lastSent){ setStatus("已登入 · 已同步", "ok"); return; }
+        window.TOEIC.applyRemote(val);
+        setStatus("已登入 · 已同步", "ok");
+      },
+      (err) => setStatus("同步中斷：" + (err.code || err.message || err), "err"));
+  });
+}
 </script>
 </body>
 </html>
