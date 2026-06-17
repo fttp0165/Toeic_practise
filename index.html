@@ -171,6 +171,37 @@
   .vdel:hover{color:var(--due);}
   .vempty{font-size:12.5px;color:var(--faint);line-height:1.6;}
 
+  /* vocab row actions + inline edit */
+  .vacts{display:flex;gap:0;flex:0 0 auto;}
+  .vedit{background:none;border:none;color:var(--faint);font-size:15px;cursor:pointer;padding:2px 5px;line-height:1;}
+  .vedit:hover{color:var(--lock);}
+  .vbatch{font-size:10.5px;color:var(--faint);margin-top:4px;font-weight:600;}
+  .wedit{display:flex;flex-direction:column;gap:7px;width:100%;}
+  .wedit input,.wedit textarea{font:inherit;font-size:14px;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;background:#FBFCFB;color:var(--ink);width:100%;}
+  .wedit textarea{resize:vertical;line-height:1.5;}
+  .wedit input:focus,.wedit textarea:focus{outline:none;border-color:var(--lock);box-shadow:0 0 0 2px var(--lock-soft);}
+  .we-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .we-save{background:var(--lock);color:#fff;border:none;border-radius:8px;padding:7px 16px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+  .we-cancel{background:none;border:1px solid var(--line-strong);border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}
+  .we-msg{font-size:12px;color:var(--due);font-weight:600;}
+
+  /* ---------- vocab library card ---------- */
+  .lib-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-top:14px;overflow:hidden;}
+  .lib-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;cursor:pointer;}
+  .lib-title{font-size:14px;font-weight:800;display:flex;align-items:center;gap:9px;}
+  .lib-count{font-size:11.5px;font-weight:700;color:var(--lock);background:var(--lock-soft);border-radius:999px;padding:2px 9px;}
+  .lib-head .chev{color:var(--faint);font-size:12px;}
+  .lib-body{padding:0 18px 18px;}
+  .lib-ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .lib-ctrl input{flex:1;min-width:150px;font:inherit;font-size:14px;border:1px solid var(--line-strong);border-radius:9px;padding:8px 11px;background:#FBFCFB;color:var(--ink);}
+  .lib-modes{display:flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden;flex:0 0 auto;}
+  .lib-mode{background:var(--surface);border:none;padding:8px 15px;font:inherit;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
+  .lib-mode.on{background:var(--lock);color:#fff;}
+  .lib-cardnote{font-size:11.5px;color:var(--muted);margin-bottom:10px;}
+  .lib-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;}
+  .lib-cards .flip{margin-bottom:0;position:relative;}
+  .flip-batch{position:absolute;top:8px;right:10px;font-size:9.5px;font-weight:700;color:var(--faint);}
+
   /* ---------- checklist ---------- */
   .task{
     display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px dashed var(--line);cursor:pointer;
@@ -275,6 +306,8 @@
     <div class="grid" id="grid"></div>
   </div>
 
+  <div id="libArea"></div>
+
   <details>
     <summary>海馬迴記憶法 · 四個原則 <span class="chev">▾</span></summary>
     <div class="acc-body">
@@ -369,6 +402,10 @@ try{ done = JSON.parse(localStorage.getItem(LS.tasks)||"{}"); }catch(e){ done={}
 let vocab={};
 try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
 let viewing = 1;
+let editing = null;     // "day:idx" 正在編輯的單字，或 null
+let libOpen = false;    // 單字庫卡片是否展開
+let libMode = "list";   // "list" | "cards"
+let libQuery = "";      // 單字庫搜尋字串
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -396,6 +433,86 @@ function findWordGlobal(word){
   return null;
 }
 migrateVocab(vocab);
+
+/* ---------- shared vocab word helpers (used by day list + library) ---------- */
+function allWords(){
+  const out=[];
+  Object.keys(vocab).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b).forEach(day=>{
+    (vocab[day]||[]).forEach((w,idx)=>out.push({day, idx, word:w}));
+  });
+  return out;
+}
+function wordBodyHTML(w){
+  return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
+    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="vex">'+esc(e)+'</div>').join(''):'')
+    +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'');
+}
+function wordEditFormHTML(day, idx){
+  const w=(vocab[day]||[])[idx]; if(!w) return "";
+  const exsText=(w.exs||[]).join("\n");
+  return '<div class="wedit" data-k="'+day+':'+idx+'">'
+    +'<input class="we-w" value="'+esc(w.w||'')+'" placeholder="單字" autocomplete="off">'
+    +'<input class="we-m" value="'+esc(w.m||'')+'" placeholder="中文意思" autocomplete="off">'
+    +'<textarea class="we-ex" rows="3" placeholder="例句（一行一句，可留空）">'+esc(exsText)+'</textarea>'
+    +'<input class="we-n" value="'+esc(w.n||'')+'" placeholder="備註（可留空）" autocomplete="off">'
+    +'<div class="we-row"><button class="we-save">儲存</button>'
+    +'<button class="we-cancel">取消</button><span class="we-msg"></span></div></div>';
+}
+// 顯示模式的單字列（含編輯/刪除鈕）；showBatch 時附「第 N 批」
+function wordRowHTML(day, idx, w, showBatch){
+  const k=day+":"+idx;
+  if(editing===k) return '<div class="vrow">'+wordEditFormHTML(day,idx)+'</div>';
+  return '<div class="vrow"><div class="vbody">'+wordBodyHTML(w)
+    +(showBatch?'<div class="vbatch">第 '+day+' 批</div>':'')
+    +'</div><div class="vacts">'
+    +'<button class="vedit" data-edit="'+k+'" title="編輯">✏️</button>'
+    +'<button class="vdel" data-del="'+k+'" title="刪除">✕</button></div></div>';
+}
+function deleteWord(day, idx){
+  const arr=vocab[day]; if(!arr||!arr[idx]) return;
+  if(!confirm("刪除單字「"+(arr[idx].w||"")+"」？")) return;
+  arr.splice(idx,1);
+  if(!arr.length) delete vocab[day];
+  editing=null;
+  saveVocab(); renderAll();
+}
+function saveWordEdit(form){
+  const parts=form.dataset.k.split(":"); const day=+parts[0], idx=+parts[1];
+  const arr=vocab[day]; if(!arr||!arr[idx]) { editing=null; renderAll(); return; }
+  const nw=form.querySelector(".we-w").value.trim();
+  const nm=form.querySelector(".we-m").value.trim();
+  const nn=form.querySelector(".we-n").value.trim();
+  const msgEl=form.querySelector(".we-msg");
+  if(!nw){ msgEl.textContent="單字不能空白"; return; }
+  // 改名若撞到「別的」既有單字 → 擋下，避免破壞單字庫去重
+  const hit=findWordGlobal(nw);
+  if(hit && !(hit.day===day && hit.idx===idx)){
+    msgEl.textContent="單字庫已有「"+nw+"」（在第 "+hit.day+" 批）"; return;
+  }
+  // 例句：一行一句，trim、去空行、去重（不分大小寫，保留順序）
+  const seen=new Set(), exs=[];
+  form.querySelector(".we-ex").value.split("\n").forEach(line=>{
+    const e=line.trim(); if(!e) return;
+    const lk=e.toLowerCase(); if(seen.has(lk)) return; seen.add(lk); exs.push(e);
+  });
+  arr[idx]={w:nw, m:nm, exs:exs, n:nn};
+  editing=null;
+  saveVocab(); renderAll();
+}
+// 將編輯/刪除/翻卡的事件綁到指定容器
+function wireWordControls(root){
+  root.querySelectorAll("[data-edit]").forEach(el=>{
+    el.onclick=e=>{ e.stopPropagation(); editing=el.getAttribute("data-edit"); renderAll(); };
+  });
+  root.querySelectorAll("[data-del]").forEach(el=>{
+    el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-del").split(":"); deleteWord(+p[0],+p[1]); };
+  });
+  root.querySelectorAll(".wedit").forEach(form=>{
+    form.querySelector(".we-save").onclick=()=>saveWordEdit(form);
+    form.querySelector(".we-cancel").onclick=()=>{ editing=null; renderAll(); };
+  });
+  root.querySelectorAll(".flip").forEach(el=>{ el.onclick=()=>el.classList.toggle("shown"); });
+}
 
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
@@ -551,13 +668,7 @@ function renderDay(){
       +'<div class="vmsg" id="vmsg"></div></div>';
     if(words.length){
       html+='<div class="vlist">';
-      words.forEach((w,i)=>{
-        html+='<div class="vrow"><div class="vbody">'
-          +'<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
-          +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="vex">'+esc(e)+'</div>').join(''):'')
-          +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'')
-          +'</div><button class="vdel" data-i="'+i+'" title="刪除">✕</button></div>';
-      });
+      words.forEach((w,i)=>{ html+=wordRowHTML(d, i, w, false); });
       html+='</div>';
     } else {
       html+='<div class="vempty">還沒輸入單字。每天目標 '+WPB+' 個，輸入後會自動排進 +1／+3／+7／+14 天的回想。</div>';
@@ -578,10 +689,8 @@ function renderDay(){
     };
   });
 
-  // flip cards in recall (toggle reveal, no full re-render)
-  area.querySelectorAll(".flip").forEach(el=>{
-    el.onclick=()=>el.classList.toggle("shown");
-  });
+  // flip cards (recall) + 單字列的編輯/刪除
+  wireWordControls(area);
 
   // vocab add
   const addBtn=area.querySelector("#vadd");
@@ -614,12 +723,76 @@ function renderDay(){
     const nEl=area.querySelector("#vn");
     if(nEl) nEl.addEventListener("keydown",e=>{ if(e.key==="Enter") commit(); });
   }
-  area.querySelectorAll(".vdel").forEach(el=>{
-    el.onclick=()=>{
-      const i=+el.dataset.i;
-      if(vocab[viewing]){ vocab[viewing].splice(i,1); if(!vocab[viewing].length) delete vocab[viewing]; saveVocab(); renderAll(); }
+}
+
+/* ---------- vocab library (overview + flip-card review) ---------- */
+function renderLibrary(){
+  const root=$("#libArea"); if(!root) return;
+  const all=allWords();
+  const total=all.length;
+
+  let html='<div class="lib-card">';
+  html+='<div class="lib-head" id="libToggle"><div class="lib-title">單字庫 '
+    +'<span class="lib-count">'+total+' 字</span></div>'
+    +'<span class="chev">'+(libOpen?'▴':'▾')+'</span></div>';
+
+  if(libOpen){
+    html+='<div class="lib-body">';
+    html+='<div class="lib-ctrl"><input id="libSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(libQuery)+'" autocomplete="off">'
+      +'<div class="lib-modes">'
+      +'<button class="lib-mode'+(libMode==="list"?" on":"")+'" data-mode="list">列表</button>'
+      +'<button class="lib-mode'+(libMode==="cards"?" on":"")+'" data-mode="cards">翻卡</button></div></div>';
+
+    const q=libQuery.trim().toLowerCase();
+    const matches=o=>{
+      const w=o.word;
+      return String(w.w||'').toLowerCase().includes(q)
+        || String(w.m||'').toLowerCase().includes(q)
+        || (w.exs||[]).some(e=>String(e).toLowerCase().includes(q))
+        || String(w.n||'').toLowerCase().includes(q);
     };
-  });
+    const filtered = q ? all.filter(matches) : all;
+
+    if(!total){
+      html+='<div class="vempty">單字庫還是空的。到每天的「第 N 批單字」輸入後，會自動收進這裡。</div>';
+    } else if(!filtered.length){
+      html+='<div class="vempty">找不到符合「'+esc(libQuery)+'」的單字。</div>';
+    } else if(libMode==="cards"){
+      html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+filtered.length+' 張。</div>';
+      html+='<div class="lib-cards">';
+      filtered.forEach(o=>{
+        const w=o.word;
+        html+='<div class="flip">'
+          +'<div class="fw">'+esc(w.w)+'</div>'
+          +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+          +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
+          +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
+          +'<div class="hintr">點按看意思</div>'
+          +'<span class="flip-batch">第 '+o.day+' 批</span></div>';
+      });
+      html+='</div>';
+    } else {
+      html+='<div class="lib-list">';
+      filtered.forEach(o=>{ html+=wordRowHTML(o.day, o.idx, o.word, true); });
+      html+='</div>';
+    }
+    html+='</div>'; // lib-body
+  }
+  html+='</div>'; // lib-card
+  root.innerHTML=html;
+
+  // wiring（單字庫內部互動只重繪自己，保住搜尋焦點）
+  root.querySelector("#libToggle").onclick=()=>{ libOpen=!libOpen; renderLibrary(); };
+  if(libOpen){
+    const s=root.querySelector("#libSearch");
+    if(s) s.oninput=()=>{
+      libQuery=s.value; renderLibrary();
+      const s2=document.querySelector("#libSearch");
+      if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }
+    };
+    root.querySelectorAll(".lib-mode").forEach(b=>{ b.onclick=()=>{ libMode=b.dataset.mode; renderLibrary(); }; });
+    wireWordControls(root);
+  }
 }
 
 function renderProgress(){
@@ -654,7 +827,7 @@ function renderProgress(){
   }
 }
 
-function renderAll(){ renderStrip(); renderDay(); renderProgress(); }
+function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");
