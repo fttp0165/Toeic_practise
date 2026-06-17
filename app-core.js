@@ -572,7 +572,7 @@ function libRowHTML(day, idx, w){
     +'<div class="lib-rowfoot"><span class="st st-'+st.key+'">'+st.label+'</span>'
     +'<span class="vbatch">'+groupLabel(day)+'</span></div>'
     +'</div><div class="vacts">'
-    +'<button class="vlearn" data-learn="'+k+'" title="設為今天新學">今天新學</button>'
+    +(st.key==='new' ? '<button class="vlearn" data-learn="'+k+'" title="設為今天新學">今天新學</button>' : '')
     +'<button class="vedit" data-edit="'+k+'" title="編輯">✏️</button>'
     +'<button class="vdel" data-del="'+k+'" title="刪除">✕</button></div></div>';
 }
