@@ -233,6 +233,28 @@
   .vlearn:hover{background:var(--lock-soft);}
   .lp-empty{font-size:13px;color:var(--muted);padding:6px 0;}
 
+  /* ---------- vocab quiz ---------- */
+  .quiz-start{margin-bottom:12px;}
+  .quiz-top{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px;}
+  .quiz-top .quiz-exit{margin-left:auto;}
+  .quiz-exit{background:none;border:1px solid var(--line-strong);border-radius:8px;padding:5px 12px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer;}
+  .quiz-prompt{font-size:12px;color:var(--due);font-weight:700;letter-spacing:.04em;}
+  .quiz-q{font-size:30px;font-weight:800;margin:8px 0 18px;letter-spacing:-.01em;word-break:break-word;line-height:1.15;}
+  .quiz-input{width:100%;font:inherit;font-size:18px;border:1px solid var(--line-strong);border-radius:10px;padding:12px 14px;background:#FBFCFB;color:var(--ink);margin-bottom:12px;}
+  .quiz-input:focus{outline:none;border-color:var(--lock);box-shadow:0 0 0 2px var(--lock-soft);}
+  .quiz-opts{display:flex;flex-direction:column;gap:8px;}
+  .quiz-opt{text-align:left;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;padding:12px 14px;font:inherit;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;transition:.12s;}
+  .quiz-opt:hover:not([disabled]){border-color:var(--lock);background:var(--lock-soft);}
+  .quiz-opt.right{background:var(--lock-soft);border-color:var(--lock);color:var(--lock);}
+  .quiz-opt.wrong{background:var(--due-soft);border-color:var(--due-ring);color:var(--due);}
+  .quiz-opt[disabled]{cursor:default;}
+  .quiz-fb{font-size:16px;font-weight:800;margin:16px 0 4px;}
+  .quiz-fb.ok{color:var(--lock);}
+  .quiz-fb.no{color:var(--due);}
+  .quiz-ans{font-size:14px;color:var(--muted);margin-bottom:16px;}
+  .quiz-result{font-size:26px;font-weight:800;margin:6px 0 18px;}
+  .quiz-acts{display:flex;gap:10px;flex-wrap:wrap;}
+
   /* ---------- checklist ---------- */
   .task{
     display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px dashed var(--line);cursor:pointer;
