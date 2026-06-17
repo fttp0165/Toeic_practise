@@ -69,6 +69,8 @@ let libMode = "list";   // "list" | "cards"
 let libQuery = "";      // 單字庫搜尋字串
 let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
+let quiz = null;        // 測驗中的 session（null = 未測驗）
+let quizDate = "";      // 測驗選的學習日期（""＝預設今天/最近）
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -579,8 +581,107 @@ function libFlipCardHTML(day, w){
     +'<div class="hintr">點按看意思</div>'
     +'<span class="flip-batch">'+groupLabel(day)+'</span></div>';
 }
+/* ---------- 測驗模式（考單字庫「今天要複習」的到期字，混合出題） ---------- */
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+// 有學習日期(lo)且 w/m 皆填的字，依日期分組計數（新到舊）
+function learnDates(){
+  const map={};
+  allWords().forEach(o=>{ const w=o.word; if(w.lo && String(w.w||'').trim() && String(w.m||'').trim()) map[w.lo]=(map[w.lo]||0)+1; });
+  return Object.keys(map).sort().reverse().map(d=>({date:d, count:map[d]}));
+}
+function quizPool(date){
+  return allWords().map(o=>o.word).filter(w=>w.lo===date && String(w.w||'').trim() && String(w.m||'').trim());
+}
+// 預設測驗日期：選過就用選的；否則今天(若今天有學)否則最近一天
+function quizDefaultDate(){
+  const dates=learnDates(); if(!dates.length) return "";
+  if(quizDate && dates.some(d=>d.date===quizDate)) return quizDate;
+  const today=todayISO();
+  return dates.some(d=>d.date===today) ? today : dates[0].date;
+}
+function startQuiz(date){
+  const pool = quizPool(date);
+  if(!pool.length) return;
+  const meanings = Array.from(new Set(allWords().map(o=>String(o.word.m||'').trim()).filter(Boolean)));
+  const items = shuffle(pool).map(w=>{
+    let type = Math.random()<0.5 ? 'type' : 'choice';
+    let options=null;
+    if(type==='choice'){
+      const distract = shuffle(meanings.filter(m=>m!==String(w.m).trim())).slice(0,3);
+      options = shuffle([String(w.m)].concat(distract));
+      if(options.length<2) type='type';   // 沒有干擾項 → 改成打字
+    }
+    return { w:String(w.w), m:String(w.m), type, options: type==='choice'?options:null };
+  });
+  quiz = { items, i:0, correct:0, answered:false, lastCorrect:null, chosen:null };
+  renderLibPage();
+}
+function quizHTML(){
+  const total=quiz.items.length;
+  if(quiz.i>=total){
+    const pct = total?Math.round(quiz.correct/total*100):0;
+    return '<div class="lp-sec quiz"><div class="quiz-top"><span>測驗完成</span>'
+      +'<button class="quiz-exit" data-quiz="exit">離開</button></div>'
+      +'<div class="quiz-result">答對 '+quiz.correct+' / '+total+'（'+pct+'%）</div>'
+      +'<div class="quiz-acts"><button class="vaddbtn" data-quiz="again">再考一次</button>'
+      +'<button class="quiz-exit" data-quiz="exit">回單字庫</button></div></div>';
+  }
+  const it=quiz.items[quiz.i];
+  let body='<div class="quiz-top"><span>第 '+(quiz.i+1)+' / '+total+' 題</span>'
+    +'<span>答對 '+quiz.correct+'</span>'
+    +'<button class="quiz-exit" data-quiz="exit">離開</button></div>';
+  if(it.type==='type'){
+    body+='<div class="quiz-prompt">看中文 · 輸入英文</div><div class="quiz-q">'+esc(it.m)+'</div>';
+    if(!quiz.answered){
+      body+='<input id="quizInput" class="quiz-input" placeholder="輸入英文單字" autocomplete="off" autocapitalize="off" spellcheck="false">'
+        +'<button class="vaddbtn" data-quiz="submit">作答</button>';
+    }
+  } else {
+    body+='<div class="quiz-prompt">看英文 · 選出正確中文</div><div class="quiz-q">'+esc(it.w)+'</div>';
+    body+='<div class="quiz-opts">'+it.options.map(opt=>{
+      let cls='quiz-opt';
+      if(quiz.answered){ if(opt===it.m) cls+=' right'; else if(opt===quiz.chosen) cls+=' wrong'; }
+      return '<button class="'+cls+'" data-quiz="opt" data-opt="'+esc(opt)+'"'+(quiz.answered?' disabled':'')+'>'+esc(opt)+'</button>';
+    }).join('')+'</div>';
+  }
+  if(quiz.answered){
+    body+='<div class="quiz-fb '+(quiz.lastCorrect?'ok':'no')+'">'+(quiz.lastCorrect?'✓ 答對了':'✕ 答錯了')+'</div>'
+      +'<div class="quiz-ans">'+esc(it.w)+' — '+esc(it.m)+'</div>'
+      +'<button class="vaddbtn" data-quiz="next">'+((quiz.i+1>=total)?'看結果':'下一題')+'</button>';
+  }
+  return '<div class="lp-sec quiz">'+body+'</div>';
+}
+function wireQuiz(root){
+  root.querySelectorAll("[data-quiz]").forEach(el=>{
+    el.onclick=()=>{
+      const a=el.getAttribute("data-quiz");
+      if(a==="exit"){ quiz=null; renderLibPage(); return; }
+      if(a==="again"){ startQuiz(); return; }
+      if(a==="next"){ quiz.i++; quiz.answered=false; quiz.chosen=null; renderLibPage(); return; }
+      const it=quiz.items[quiz.i];
+      if(a==="submit"){
+        const inp=root.querySelector("#quizInput");
+        const val=(inp?inp.value:'').trim();
+        quiz.lastCorrect = val.toLowerCase()===String(it.w).trim().toLowerCase();
+        if(quiz.lastCorrect) quiz.correct++;
+        quiz.answered=true; renderLibPage(); return;
+      }
+      if(a==="opt"){
+        if(quiz.answered) return;
+        quiz.chosen=el.getAttribute("data-opt");
+        quiz.lastCorrect = quiz.chosen===it.m;
+        if(quiz.lastCorrect) quiz.correct++;
+        quiz.answered=true; renderLibPage(); return;
+      }
+    };
+  });
+  const inp=root.querySelector("#quizInput");
+  if(inp){ inp.focus(); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ const b=root.querySelector('[data-quiz="submit"]'); if(b) b.click(); } }); }
+}
+
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
+  if(quiz){ root.innerHTML=quizHTML(); wireQuiz(root); return; }   // 測驗中：全頁顯示測驗
   const all=allWords(), c=libCounts(), due=libDue();
 
   let html='<div class="lp-intro"><div class="kicker">海馬迴間隔複習</div>'
@@ -597,6 +698,23 @@ function renderLibPage(){
     due.forEach(o=>{ html+=libReviewCardHTML(o.day, o.idx, o.word); });
     html+='</div>';
   } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
+  html+='</div>';
+
+  // 測驗（依學習日期選一組字考）
+  const qdates=learnDates();
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>單字測驗</h3>';
+  if(qdates.length){
+    const today=todayISO(), sel=quizDefaultDate();
+    const selCount=(qdates.find(d=>d.date===sel)||{}).count||0;
+    html+='<div class="quiz-pick"><label for="quizDate">學習日期</label><select id="quizDate">';
+    qdates.forEach(d=>{
+      html+='<option value="'+d.date+'"'+(d.date===sel?' selected':'')+'>'+d.date+(d.date===today?'（今天）':'')+' · '+d.count+' 字</option>';
+    });
+    html+='</select><button class="vaddbtn" data-quiz-start="1">📝 開始測驗（'+selCount+' 字）</button></div>';
+    html+='<div class="lib-cardnote">考所選日期學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
+  } else {
+    html+='<div class="lp-empty">還沒有開始學習的單字。把字選為「今天新學」或新增單字後就能測驗。</div>';
+  }
   html+='</div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>新增單字進單字庫</h3>'
@@ -634,6 +752,8 @@ function renderLibPage(){
   root.querySelectorAll("[data-revyes]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revyes").split(":"); reviewYes(p[0],+p[1]); }; });
   root.querySelectorAll("[data-revno]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revno").split(":"); reviewNo(p[0],+p[1]); }; });
   root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
+  const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
+  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
