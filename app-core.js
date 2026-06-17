@@ -68,6 +68,7 @@ let libOpen = false;    // 單字庫卡片是否展開
 let libMode = "list";   // "list" | "cards"
 let libQuery = "";      // 單字庫搜尋字串
 let lpQuery = "";       // 單字庫頁面的搜尋字串
+let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -568,6 +569,16 @@ function libRowHTML(day, idx, w){
     +'<button class="vedit" data-edit="'+k+'" title="編輯">✏️</button>'
     +'<button class="vdel" data-del="'+k+'" title="刪除">✕</button></div></div>';
 }
+// 自由練習用的翻卡（無記得/忘了按鈕，只翻開看意思）
+function libFlipCardHTML(day, w){
+  return '<div class="flip">'
+    +'<div class="fw">'+esc(w.w)+'</div>'
+    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+    +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
+    +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
+    +'<div class="hintr">點按看意思</div>'
+    +'<span class="flip-batch">'+groupLabel(day)+'</span></div>';
+}
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
   const all=allWords(), c=libCounts(), due=libDue();
@@ -598,7 +609,10 @@ function renderLibPage(){
     +'<div class="vmsg" id="lvmsg"></div></div></div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>全部單字 · '+all.length+'</h3>'
-    +'<div class="lib-ctrl"><input id="lpSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(lpQuery)+'" autocomplete="off"></div>';
+    +'<div class="lib-ctrl"><input id="lpSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(lpQuery)+'" autocomplete="off">'
+    +'<div class="lib-modes">'
+    +'<button class="lib-mode'+(lpMode==="list"?" on":"")+'" data-lpmode="list">列表</button>'
+    +'<button class="lib-mode'+(lpMode==="cards"?" on":"")+'" data-lpmode="cards">翻卡</button></div></div>';
   const q=lpQuery.trim().toLowerCase();
   const filtered = q ? all.filter(o=>{
     const w=o.word;
@@ -607,6 +621,10 @@ function renderLibPage(){
   }) : all;
   if(!all.length){ html+='<div class="lp-empty">單字庫還是空的。用上面的「新增單字」開始，或在 20 天衝刺裡輸入的字也會出現在這。</div>'; }
   else if(!filtered.length){ html+='<div class="lp-empty">找不到符合「'+esc(lpQuery)+'」的單字。</div>'; }
+  else if(lpMode==="cards"){
+    html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+filtered.length+' 張。</div>';
+    html+='<div class="lib-cards">'; filtered.forEach(o=>{ html+=libFlipCardHTML(o.day, o.word); }); html+='</div>';
+  }
   else { html+='<div class="lib-list">'; filtered.forEach(o=>{ html+=libRowHTML(o.day, o.idx, o.word); }); html+='</div>'; }
   html+='</div>';
 
@@ -616,6 +634,7 @@ function renderLibPage(){
   root.querySelectorAll("[data-revyes]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revyes").split(":"); reviewYes(p[0],+p[1]); }; });
   root.querySelectorAll("[data-revno]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revno").split(":"); reviewNo(p[0],+p[1]); }; });
   root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
+  root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
     const s2=document.querySelector("#lpSearch"); if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length,s2.value.length); } };
