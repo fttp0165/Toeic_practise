@@ -62,8 +62,10 @@ let done = {};
 try{ done = JSON.parse(localStorage.getItem(LS.tasks)||"{}"); }catch(e){ done={}; }
 let vocab={};
 try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
-let log={};   // 練習紀錄 { "YYYY-MM-DD": 次數 }
+let log={};   // 練習紀錄 { "YYYY-MM-DD": {c:對, x:錯} }
 try{ log = JSON.parse(localStorage.getItem(LS.log)||"{}"); }catch(e){ log={}; }
+// 舊格式（單一數字＝總次數）→ {c, x}，把舊總數記為已答對以保留總量
+Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k], x:0}; });
 let viewing = 1;
 let editing = null;     // "day:idx" 正在編輯的單字，或 null
 let libOpen = false;    // 單字庫卡片是否展開
@@ -194,8 +196,14 @@ function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, voc
 function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); notifyChange(); }
 function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); notifyChange(); }
 function saveLog(){ localStorage.setItem(LS.log, JSON.stringify(log)); notifyChange(); }
-// 練習一個單字（測驗作答 / 記得 / 忘了）→ 今天 +1
-function bumpPractice(){ const d=todayISO(); log[d]=(log[d]||0)+1; saveLog(); }
+// 正規化一天的紀錄（相容舊的數字格式）→ {c:對, x:錯, n:總}
+function dayTotal(e){ if(!e) return {c:0,x:0,n:0}; if(typeof e==="number") return {c:e,x:0,n:e}; const c=e.c||0,x=e.x||0; return {c,x,n:c+x}; }
+// 練習一個單字（測驗答對/答錯、記得/忘了）→ 今天對或錯 +1
+function bumpPractice(correct){
+  const d=todayISO(); const e=dayTotal(log[d]);
+  if(correct) e.c++; else e.x++;
+  log[d]={c:e.c, x:e.x}; saveLog();
+}
 function key(d,id){ return "d"+d+":"+id; }
 
 function todayDay(){
@@ -531,8 +539,8 @@ function libCounts(){
   return {learning, due, done};
 }
 function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; saveVocab(); renderAll(); }
-function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(); saveVocab(); renderAll(); }
-function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(); saveVocab(); renderAll(); }
+function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(true);  saveVocab(); renderAll(); }
+function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
 function addLibWord(wv, mv, exv, nv){
   const hit=findWordGlobal(wv);
@@ -669,14 +677,14 @@ function wireQuiz(root){
         const val=(inp?inp.value:'').trim();
         quiz.lastCorrect = val.toLowerCase()===String(it.w).trim().toLowerCase();
         if(quiz.lastCorrect) quiz.correct++;
-        quiz.answered=true; bumpPractice(); renderLibPage(); return;
+        quiz.answered=true; bumpPractice(quiz.lastCorrect); renderLibPage(); return;
       }
       if(a==="opt"){
         if(quiz.answered) return;
         quiz.chosen=el.getAttribute("data-opt");
         quiz.lastCorrect = quiz.chosen===it.m;
         if(quiz.lastCorrect) quiz.correct++;
-        bumpPractice();
+        bumpPractice(quiz.lastCorrect);
         quiz.answered=true; renderLibPage(); return;
       }
     };
@@ -692,7 +700,8 @@ function recentLog(days){
     const d=todayMid(); d.setDate(d.getDate()-i);
     const m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
     const iso=d.getFullYear()+"-"+m+"-"+dd;
-    out.push({iso, md:(+m)+"/"+(+dd), count:log[iso]||0, isToday:i===0});
+    const e=dayTotal(log[iso]);
+    out.push({iso, md:(+m)+"/"+(+dd), c:e.c, x:e.x, n:e.n, isToday:i===0});
   }
   return out;
 }
@@ -709,21 +718,32 @@ function renderLibPage(){
     +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
     +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
 
-  // 練習紀錄面板（每日練習單字次數）
+  // 練習紀錄面板（每日練習：對／錯）
   const recent=recentLog(14);
-  const totalPractice=Object.keys(log).reduce((a,k)=>a+(+log[k]||0),0);
-  const todayCount=log[todayISO()]||0;
-  const maxC=Math.max(1,...recent.map(d=>d.count));
+  let totC=0, totX=0; Object.keys(log).forEach(k=>{ const e=dayTotal(log[k]); totC+=e.c; totX+=e.x; });
+  const totN=totC+totX, acc = totN ? Math.round(totC/totN*100) : 0;
+  const t=dayTotal(log[todayISO()]);
+  const maxN=Math.max(1,...recent.map(d=>d.n));
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>練習紀錄</h3>';
-  html+='<div class="rec-top"><div><span class="rec-big">'+todayCount+'</span><span class="rec-lab">今天練習</span></div>'
-    +'<div><span class="rec-big">'+totalPractice+'</span><span class="rec-lab">累計練習</span></div></div>';
+  html+='<div class="rec-top">'
+    +'<div><span class="rec-big">'+t.n+'</span><span class="rec-lab">今天練習</span><div class="rec-sub">對 '+t.c+' · 錯 '+t.x+'</div></div>'
+    +'<div><span class="rec-big">'+totN+'</span><span class="rec-lab">累計</span><div class="rec-sub">對 '+totC+' · 錯 '+totX+'</div></div>'
+    +'<div><span class="rec-big">'+acc+'%</span><span class="rec-lab">正確率</span></div></div>';
   html+='<div class="rec-chart">'+recent.map(d=>{
-    const h = d.count ? Math.max(8, Math.round(d.count/maxC*100)) : 0;
-    return '<div class="rec-col"><div class="rec-bararea"><div class="rec-bar'+(d.isToday?' today':'')+(d.count?'':' empty')+'"'
-      +(d.count?' style="height:'+h+'%"':'')+' title="'+d.iso+'：'+d.count+' 次"></div></div>'
-      +'<div class="rec-x'+(d.isToday?' today':'')+'">'+d.md+'</div></div>';
+    const totH = d.n ? Math.max(8, Math.round(d.n/maxN*100)) : 0;
+    const cls = d.isToday?' today':'';
+    let bar;
+    if(d.n){
+      bar='<div class="rec-bar-stack'+cls+'" style="height:'+totH+'%" title="'+d.iso+'：對 '+d.c+'，錯 '+d.x+'">'
+        +(d.x?'<div class="rec-seg wrong" style="flex:'+d.x+'"></div>':'')
+        +(d.c?'<div class="rec-seg right" style="flex:'+d.c+'"></div>':'')+'</div>';
+    } else {
+      bar='<div class="rec-bar empty" title="'+d.iso+'：0"></div>';
+    }
+    return '<div class="rec-col"><div class="rec-bararea">'+bar+'</div>'
+      +'<div class="rec-x'+cls+'">'+d.md+'</div></div>';
   }).join('')+'</div>';
-  html+='<div class="lib-cardnote">每天測驗作答或按「記得／忘了」都會 +1。</div>';
+  html+='<div class="rec-legend"><span class="lg right"></span>答對 <span class="lg wrong"></span>答錯 · 測驗作答與「記得／忘了」都計入</div>';
   html+='</div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
