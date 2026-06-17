@@ -131,6 +131,39 @@
   .recall .none{font-size:13px;color:var(--muted);}
   .recall .hint{font-size:11.5px;color:var(--muted);margin-top:10px;}
 
+  /* batch group + flip cards */
+  .bgroup{margin-bottom:12px;}
+  .bgroup:last-of-type{margin-bottom:0;}
+  .bhead{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:7px;display:flex;align-items:center;gap:7px;}
+  .biv{font-size:10px;font-weight:700;color:#fff;background:var(--due);border-radius:5px;padding:1px 6px;}
+  .bcnt{font-size:10px;font-weight:600;color:var(--due);}
+  .bnote{font-size:11.5px;color:var(--muted);padding:2px 0 4px;}
+  .flip{background:var(--surface);border:1px solid var(--due-ring);border-radius:10px;padding:10px 12px;margin-bottom:7px;cursor:pointer;}
+  .flip:last-child{margin-bottom:0;}
+  .flip .fw{font-size:15px;font-weight:800;color:var(--ink);}
+  .flip .fex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
+  .flip .fm{font-size:14px;font-weight:700;color:var(--lock);margin-top:8px;filter:blur(5.5px);transition:filter .15s;user-select:none;}
+  .flip .hintr{font-size:10.5px;color:var(--faint);margin-top:5px;}
+  .flip.shown .fm{filter:none;}
+  .flip.shown .hintr{visibility:hidden;}
+
+  /* vocab entry */
+  .ventry{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+  .ventry input{font:inherit;font-size:14.5px;border:1px solid var(--line-strong);border-radius:9px;padding:10px 12px;background:#FBFCFB;color:var(--ink);}
+  .ventry input:focus{outline:none;border-color:var(--lock);box-shadow:0 0 0 2px var(--lock-soft);}
+  .vaddbtn{align-self:flex-start;background:var(--lock);color:#fff;border:none;border-radius:9px;padding:10px 20px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;}
+  .vaddbtn:active{transform:translateY(1px);}
+  .vrow{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px dashed var(--line);}
+  .vrow:first-child{border-top:none;}
+  .vbody{flex:1;min-width:0;}
+  .vhead{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;}
+  .vhead .vw{font-weight:800;font-size:14.5px;color:var(--ink);}
+  .vhead .vm{font-size:13px;font-weight:600;color:var(--lock);}
+  .vex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
+  .vdel{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:2px 4px;flex:0 0 auto;line-height:1;}
+  .vdel:hover{color:var(--due);}
+  .vempty{font-size:12.5px;color:var(--faint);line-height:1.6;}
+
   /* ---------- checklist ---------- */
   .task{
     display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px dashed var(--line);cursor:pointer;
@@ -154,6 +187,8 @@
     background:var(--bg);border-radius:10px;padding:9px 12px;
   }
   .moon{width:15px;height:15px;flex:0 0 auto;}
+  .busy{margin-top:8px;font-size:12px;color:#7A4A24;background:var(--due-soft);border:1px solid var(--due-ring);border-radius:10px;padding:9px 12px;line-height:1.55;}
+  .busy b{color:var(--due);}
 
   /* ---------- progress ---------- */
   .prog-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-top:14px;padding:18px 20px;}
@@ -243,7 +278,7 @@
 <script>
 "use strict";
 const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
-const LS={start:"toeic20_start", tasks:"toeic20_tasks"};
+const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab"};
 
 /* ---------- phases ---------- */
 function phaseOf(d){
@@ -261,27 +296,32 @@ function tasksOf(d){
   t.push({id:"recall",title:"晨間主動回想複習",note:"蓋住中文，回想下方各批單字",time:"15 分"});
 
   if(d===1){
-    t.push({id:"mock0",title:"做一回完整模擬考抓底",note:"分數難看沒關係，目的是看清各 Part 弱點",time:"~2 hr"});
+    t.push({id:"mock0",title:"完整模擬考 1 回（抓底）",note:"分數難看沒關係，目的是看清各 Part 弱點",time:"~2 hr"});
     t.push({id:"types",title:"熟記 7 大 Part 題型／題數／配分",note:"低分者最常跳過、但回報最大的一步",time:"30 分"});
   } else if(d<=3){
-    t.push({id:"lis",title:"聽力 Part 1–2＋shadowing 跟讀",note:"題型固定，先把套路與陷阱摸熟",time:"25 分"});
-    t.push({id:"gram",title:"Part 5 文法一組（10–15 題）＋訂正",note:"錯題歸類：詞性／時態／介系詞／連接詞",time:"25 分"});
-    t.push({id:"focus",title:"複習題型配分＋加練 Part 1–2",note:"把地基踩穩",time:"25 分"});
+    t.push({id:"lis",title:"聽力 Part 1–2：20 題 + shadowing 5 句",note:"題型固定，先把套路與陷阱摸熟",time:"25 分"});
+    t.push({id:"gram",title:"Part 5 文法 10 題 + 訂正",note:"錯題歸類：詞性／時態／介系詞／連接詞",time:"25 分"});
+    t.push({id:"focus",title:"複習題型配分 + 加練 Part 1–2 約 10 題",note:"把地基踩穩",time:"25 分"});
   } else if(d<=9){
-    t.push({id:"lis",title:"聽力 Part 1–2＋shadowing 跟讀",note:"今天的主攻項，跟著音檔開口唸",time:"25 分"});
-    t.push({id:"gram",title:"Part 5 文法一組＋訂正歸納",note:"看到題目就知道在考哪個點",time:"25 分"});
-    t.push({id:"focus",title:"加練 Part 1–2 聽力＋shadowing",note:"把「聽得懂的比例」拉上來",time:"25 分"});
+    t.push({id:"lis",title:"聽力 Part 1–2：25–30 題 + shadowing 8 句",note:"今天的主攻項，跟著音檔開口唸",time:"25 分"});
+    t.push({id:"gram",title:"Part 5 文法 15 題 + 歸類訂正",note:"看到題目就知道在考哪個點",time:"25 分"});
+    t.push({id:"focus",title:"加練 Part 1–2 約 15 題 + shadowing",note:"把「聽得懂的比例」拉上來",time:"25 分"});
   } else if(d<=14){
-    t.push({id:"lis",title:"聽力 Part 1–2＋shadowing",note:"維持手感",time:"20 分"});
-    t.push({id:"gram",title:"Part 5／6 文法一組＋訂正",note:"Part 6 併進文法練",time:"25 分"});
-    t.push({id:"focus",title:"Part 3／4：先看題再聽",note:"開聽前先掃過問題，知道要抓什麼",time:"30 分"});
+    t.push({id:"lis",title:"Part 3／4：3–4 篇（約 10–12 題）",note:"先看題再聽，開聽前掃過問題抓重點",time:"30 分"});
+    t.push({id:"gram",title:"Part 5／6 文法 10–15 題 + 訂正",note:"Part 6 併進文法一起練",time:"25 分"});
+    t.push({id:"focus",title:"聽力 Part 1–2：10 題維持手感",note:"別讓最穩的兩個 Part 生疏",time:"20 分"});
   } else if(d<=18){
-    t.push({id:"gram",title:"Part 5／6 文法一組＋訂正",note:"維持文法穩定分",time:"20 分"});
-    t.push({id:"lis",title:"Part 3／4 聽力實戰",note:"先看題、抓關鍵",time:"25 分"});
-    t.push({id:"focus",title:"Part 7：關鍵字定位＋時間管理",note:"不逐字讀，先寫單篇文章題",time:"30 分"});
+    t.push({id:"read",title:"Part 7 單篇：2–3 篇（計時）",note:"關鍵字定位、不逐字讀，先寫單篇文章題",time:"30 分"});
+    t.push({id:"lis",title:"Part 3／4：2 篇實戰",note:"先看題、抓關鍵，維持聽力手感",time:"25 分"});
+    t.push({id:"gram",title:"Part 5／6 文法 10 題 + 訂正",note:"維持文法穩定分",time:"20 分"});
   } else {
-    t.push({id:"mockF",title:"全真計時模擬（聽力＋閱讀一回）",note:"嚴格計時，把答題節奏調到位",time:"~2 hr"});
-    t.push({id:"review",title:"複習錯題本＋單字本",note:"收尾，把會的穩穩拿下",time:"30 分"});
+    t.push({id:"mockF",title:"全真計時模擬 1 回（聽力＋閱讀）",note:"嚴格計時，把答題節奏調到位",time:"~2 hr"});
+    t.push({id:"review",title:"複習錯題本 + 單字本",note:"收尾，把會的穩穩拿下",time:"30 分"});
+  }
+
+  // 睡前新單字（Day 1–18），列為可打勾任務
+  if(d<=LAST_NEW){
+    t.push({id:"newvocab",title:"睡前背新單字 "+WPB+" 個（第 "+d+" 批）",note:"當天最後一件事，明早起床先回想",time:"15 分"});
   }
   return t;
 }
@@ -298,9 +338,12 @@ function recallBatches(d){
 let startDate = localStorage.getItem(LS.start) || "";
 let done = {};
 try{ done = JSON.parse(localStorage.getItem(LS.tasks)||"{}"); }catch(e){ done={}; }
+let vocab={};
+try{ vocab = JSON.parse(localStorage.getItem(LS.vocab)||"{}"); }catch(e){ vocab={}; }
 let viewing = 1;
 
 function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); }
+function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); }
 function key(d,id){ return "d"+d+":"+id; }
 
 function todayDay(){
@@ -352,21 +395,43 @@ function waveHTML(d){
   }).join("")+'</div>';
 }
 
+function flipCardsHTML(srcDay){
+  const words = vocab[srcDay] || [];
+  if(!words.length){
+    return '<div class="bnote">（第 '+srcDay+' 批還沒輸入單字 — 到 Day '+srcDay+' 補上就會出現在這裡）</div>';
+  }
+  return words.map((w,i)=>
+    '<div class="flip" data-flip="'+srcDay+'-'+i+'">'
+    +'<div class="fw">'+esc(w.w)+'</div>'
+    +(w.ex?'<div class="fex">'+esc(w.ex)+'</div>':'')
+    +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
+    +'<div class="hintr">點按看意思</div></div>'
+  ).join("");
+}
+
 function recallHTML(d){
   const b=recallBatches(d);
   if(!b.length){
     return '<div class="recall"><div class="lead">晨間回想</div>'
       +'<div class="none">今天還沒有到期的舊批次 — 全力背好今晚的第 '+d+' 批新字就好。</div></div>';
   }
-  const chips=b.map(o=>'<div class="batch">第 '+o.src+' 批<small>+'+o.iv+' 天 · 約 '+WPB+' 字</small></div>').join("");
-  return '<div class="recall"><div class="lead">今天要主動回想這幾批（蓋住中文）</div>'
-    +'<div class="batch-list">'+chips+'</div>'
-    +'<div class="hint">每批用「看英文→回想中文」掃過，想不出來再翻開。共約 '+(b.length*WPB)+' 字，15 分鐘刷完。</div></div>';
+  const blocks=b.map(o=>{
+    const cnt=(vocab[o.src]||[]).length;
+    return '<div class="bgroup"><div class="bhead">第 '+o.src+' 批 '
+      +'<span class="biv">+'+o.iv+' 天</span>'
+      +'<span class="bcnt">'+cnt+' 字</span></div>'
+      +flipCardsHTML(o.src)+'</div>';
+  }).join("");
+  return '<div class="recall"><div class="lead">今天要主動回想這幾批（先想，再點按驗證）</div>'
+    +blocks
+    +'<div class="hint">看英文與例句先回想中文，想不出來再點開。這就是在告訴海馬迴「這很重要」。</div></div>';
 }
 
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
 function nightHTML(d){
-  if(d>LAST_NEW) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字。</div>';
-  return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>睡前背<b style="color:#1E2529">&nbsp;第 '+d+' 批新單字（'+WPB+' 個）</b>＝今天最後一件事，明早起床先回想。</div>';
+  if(d>LAST_NEW) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字，別熬夜。</div>';
+  return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>記憶在睡眠中歸檔：新單字排最後、明早起床先回想，衝刺期別熬夜。</div>';
 }
 
 function checkSVG(){return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';}
@@ -408,7 +473,36 @@ function renderDay(){
       +'<span class="t-time">'+t.time+'</span></div>';
   });
   html+=nightHTML(d);
-  html+='</div></div>';
+  if(d>1 && d<19){
+    html+='<div class="busy">⏱ 只有 1 小時？保留<b>單字＋聽力＋文法</b>三項核心、量打八折（文法 10 題、聽力 15 題、新字仍 15），砍掉其餘。間隔複習絕不能斷。</div>';
+  }
+  html+='</div>'; // close tasks section
+
+  // vocab entry (only for new-word days)
+  if(d<=LAST_NEW){
+    const words = vocab[d] || [];
+    html+='<div class="section"><div class="sec-head"><span class="dot green"></span>第 '+d+' 批單字 · 已輸入 '+words.length+'/'+WPB+'</div>';
+    html+='<div class="ventry">'
+      +'<input id="vw" placeholder="單字 (例 compliance)" autocomplete="off">'
+      +'<input id="vm" placeholder="中文意思 (例 合規 / 法規遵循)" autocomplete="off">'
+      +'<input id="vex" placeholder="例句（可留空）" autocomplete="off">'
+      +'<button class="vaddbtn" id="vadd">加入這個字</button></div>';
+    if(words.length){
+      html+='<div class="vlist">';
+      words.forEach((w,i)=>{
+        html+='<div class="vrow"><div class="vbody">'
+          +'<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
+          +(w.ex?'<div class="vex">'+esc(w.ex)+'</div>':'')
+          +'</div><button class="vdel" data-i="'+i+'" title="刪除">✕</button></div>';
+      });
+      html+='</div>';
+    } else {
+      html+='<div class="vempty">還沒輸入單字。每天目標 '+WPB+' 個，輸入後會自動排進 +1／+3／+7／+14 天的回想。</div>';
+    }
+    html+='</div>';
+  }
+
+  html+='</div>'; // close card
 
   area.innerHTML=html;
 
@@ -418,6 +512,35 @@ function renderDay(){
       done[k]=!done[k];
       if(!done[k]) delete done[k];
       save(); renderAll();
+    };
+  });
+
+  // flip cards in recall (toggle reveal, no full re-render)
+  area.querySelectorAll(".flip").forEach(el=>{
+    el.onclick=()=>el.classList.toggle("shown");
+  });
+
+  // vocab add
+  const addBtn=area.querySelector("#vadd");
+  if(addBtn){
+    const commit=()=>{
+      const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex");
+      const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim();
+      if(!w){ wEl.focus(); return; }
+      if(!vocab[d]) vocab[d]=[];
+      vocab[d].push({w,m,ex});
+      saveVocab(); renderAll();
+      // refocus the word field for fast entry
+      const nw=document.querySelector("#vw"); if(nw) nw.focus();
+    };
+    addBtn.onclick=commit;
+    const exEl=area.querySelector("#vex");
+    if(exEl) exEl.addEventListener("keydown",e=>{ if(e.key==="Enter") commit(); });
+  }
+  area.querySelectorAll(".vdel").forEach(el=>{
+    el.onclick=()=>{
+      const i=+el.dataset.i;
+      if(vocab[viewing]){ vocab[viewing].splice(i,1); if(!vocab[viewing].length) delete vocab[viewing]; saveVocab(); renderAll(); }
     };
   });
 }
