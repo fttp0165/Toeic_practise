@@ -12,8 +12,8 @@
 | 產品定位 | 個人 20 天 TOEIC 衝刺的每日任務 + 單字間隔複習工具 |
 | 使用者 | 單一使用者（自己），非多人註冊平台 |
 | 學習目標 | TOEIC 300 → 500，重點在「撿回該拿沒拿的分」而非提升英文天花板 |
-| 目前型態 | 單一 `index.html`（HTML + CSS + 原生 JS，無框架、無建置流程） |
-| 儲存方式 | 瀏覽器 `localStorage`（綁定裝置 + 瀏覽器） |
+| 目前型態 | 兩頁靜態網站（`index.html` 衝刺頁、`library.html` 單字庫頁），共用 `styles.css` / `app-core.js` / `sync.js`，原生 JS、無框架、無建置流程 |
+| 儲存方式 | 瀏覽器 `localStorage`（綁定裝置 + 瀏覽器）＋ 登入後 Firebase RTDB 雲端同步 |
 | 代管 | GitHub Pages（repo: `fttp0165/Toeic_practise`，public） |
 | 線上網址 | `https://fttp0165.github.io/Toeic_practise/`（啟用 Pages 後） |
 
@@ -35,7 +35,7 @@
 - **編輯單字**：每個單字可就地編輯（單字 / 中文 / 多例句一行一句 / 備註）；改名撞到既有字會被擋下，避免破壞去重。
 - **單字庫總覽**：可收合卡片列出全部單字（跨天、附「第 N 批」標籤），支援搜尋（單字／中文／例句／備註）與「列表 / 翻卡」兩種檢視。
 - **單字庫翻卡複習**：總覽切到「翻卡」即把整個單字庫攤成翻卡，中文預設模糊、點按翻開，可隨時自由複習（與晨間到期複習互補）。
-- **海馬迴單字庫頁面（獨立分頁）**：頂部分頁切換「20 天衝刺 / 海馬迴單字庫」。單字庫頁與 20 天**共用同一池單字**，但複習排程獨立、依**真實日期**跑 +1／+3／+7／+14（每字記 `lo`/`ri`）。可在庫中把任一字選為「今天新學」、新增單字進庫（存入 `lib` 桶並開始學習），首頁顯示今天到期複習翻卡與「記得／忘了」進階。完全不影響 20 天批次與進度。
+- **海馬迴單字庫頁面（獨立頁 `library.html`）**：頂部導覽列在「20 天衝刺(`index.html`) / 海馬迴單字庫(`library.html`)」兩頁間切換。單字庫頁與 20 天**共用同一池單字**（同一份 `localStorage`／雲端資料），但複習排程獨立、依**真實日期**跑 +1／+3／+7／+14（每字記 `lo`/`ri`）。可把任一字選為「今天新學」、新增單字進庫（存入 `lib` 桶並開始學習），頁面顯示今天到期複習翻卡與「記得／忘了」進階。完全不影響 20 天批次與進度。
 - **進度總覽**：總完成率 %、完成項數、連續完成天數、20 格完成度方格圖。
 - **方法與計畫說明**：海馬迴四原則、20 天五階段地圖（可收合）。
 - **清除進度**：一鍵重置 localStorage。
@@ -167,28 +167,27 @@
 
 ---
 
-## 8. 建議技術棧與專案結構
+## 8. 專案結構（現況）
 
-維持現況的「無框架單檔」對 v1 很好，但若要長期用 Claude Code 開發、且預期接 Supabase，建議小幅整理：
+為了加入第二個頁面（單字庫），已把原本內嵌單檔拆成共用檔案（純靜態、無建置）：
 
 ```
 Toeic_practise/
-├── index.html          # 入口（GitHub Pages 首頁）
-├── src/
-│   ├── app.js          # 主邏輯（從 index.html 內嵌 <script> 抽出）
-│   ├── srs.js          # 間隔複習引擎（純函式，可單元測試）
-│   ├── storage.js      # 儲存層抽象：local | supabase 可切換
-│   └── styles.css      # 樣式
-├── data/
-│   └── plan.js         # 五階段 / 每日任務量（領域內容，與邏輯分離）
-├── CLAUDE.md           # 給 Claude Code 的專案守則（見 §10）
-├── PROJECT_PLAN.md     # 本文件
-└── README.md
+├── index.html          # 20 天衝刺頁（GitHub Pages 首頁）
+├── library.html        # 海馬迴單字庫頁（獨立網址，與衝刺頁共用資料）
+├── styles.css          # 共用樣式（兩頁 <link>）
+├── app-core.js         # 共用主邏輯：狀態/SRS/單字helpers/各區渲染（缺的容器自動略過）
+├── sync.js             # 共用 Firebase RTDB 同步層（ES module，透過 window.TOEIC 橋接）
+├── Docs/PROJECT_PLAN.md / FIREBASE_SETUP.md
+└── .claude/launch.json # 本機預覽用（未進版控）
 ```
 
-關鍵設計：**把儲存做成抽象層**（`storage.js` 暴露 `get/set/list` 等介面），M1 用 localStorage 實作，M3 換 Supabase 實作時 UI 不用動。間隔複習引擎 `srs.js` 做成純函式，方便測試與重構。
+關鍵設計：
+- **共用一份 `app-core.js`**：包含全部邏輯，每個渲染函式只在對應容器存在時才動作，所以同一支腳本能同時服務兩個頁面、無重複。
+- **`window.TOEIC` 橋接**：`app-core.js` 暴露 `getLocal / applyRemote / isLocalEmpty / setOnChange`，`sync.js` 只依賴這個介面 → 換後端（如 Supabase）時改 `sync.js` 即可，UI/邏輯不動（即原規劃的「儲存抽象層」精神）。
+- 兩頁透過 `localStorage`（＋登入後 RTDB）共用同一份 `vocab`，達成「共用單字池、各自排程」。
 
-> 注意：若維持「單檔內嵌」型態，就跳過上面拆檔；是否拆檔取決於要不要加測試與後端。建議在做 M3 之前再拆。
+> 未來若要做單元測試，可再把間隔複習純函式（`recallBatches` / `libStatus` 等）獨立成 `srs.js`。
 
 ---
 

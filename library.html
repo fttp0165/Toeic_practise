@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>海馬迴單字庫 · TOEIC</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">海馬迴間隔複習</div>
+    <h1>海馬迴單字庫</h1>
+    <div class="sub">長期記憶單字庫 · 與 20 天衝刺共用單字、依真實日期複習</div>
+  </header>
+
+  <div class="syncbar">
+    <button class="authbtn" id="authBtn">
+      <svg class="gmark" viewBox="0 0 48 48" aria-hidden="true"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 30 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.2 3l6.3-6.3C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
+      用 Google 登入同步
+    </button>
+    <span class="syncstatus" id="syncStatus">未登入 · 進度只存在本機</span>
+  </div>
+
+  <nav class="tabs">
+    <a class="tab" href="index.html">← 20 天衝刺</a>
+    <span class="tab on">海馬迴單字庫</span>
+  </nav>
+
+  <div id="libPageArea"></div>
+
+  <div class="foot">
+    海馬迴單字庫與 20 天衝刺<b>共用同一池單字</b>，但複習排程獨立、依真實日期。<br>
+    把字選為「今天新學」，之後 +1／+3／+7／+14 天會自動排進複習。
+  </div>
+</div>
+
+<script src="app-core.js"></script>
+<script type="module" src="sync.js"></script>
+</body>
+</html>
