@@ -599,7 +599,7 @@ function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; 
 function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(true, w);  saveVocab(); renderAll(); }
 function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false, w); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
-function addLibWord(wv, mv, exv, nv){
+function addLibWord(wv, mv, exv, nv, learn){
   const hit=findInCurLib(wv);   // 同庫內去重
   if(hit){
     const wd=hit.word;
@@ -608,12 +608,14 @@ function addLibWord(wv, mv, exv, nv){
     if(exv && !dup){ (wd.exs=wd.exs||[]).push(exv); added=true; }
     if(mv && !wd.m) wd.m=mv;
     if(nv && !wd.n) wd.n=nv;
-    wd.lo=todayISO(); wd.ri=0;
+    if(learn){ wd.lo=todayISO(); wd.ri=0; }
     saveVocab(); renderAll();
-    return "「"+wv+"」已在「"+curLib+"」，已設為今天新學"+(added?"並新增例句":"");
+    return "「"+wv+"」已在「"+curLib+"」"+(learn?"，已設為今天新學":"")+(added?"，已新增例句":"");
   }
   if(!Array.isArray(vocab.lib)) vocab.lib=[];
-  vocab.lib.push({w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib, lo:todayISO(), ri:0});
+  const obj={w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib};
+  if(learn){ obj.lo=todayISO(); obj.ri=0; }
+  vocab.lib.push(obj);
   saveVocab(); renderAll();
   return "";
 }
@@ -960,7 +962,8 @@ function renderLibPage(){
     +'<input id="lvm" placeholder="中文意思" autocomplete="off">'
     +'<input id="lvex" placeholder="例句（可留空）" autocomplete="off">'
     +'<input id="lvn" placeholder="備註（可留空）" autocomplete="off">'
-    +'<button class="vaddbtn" id="lvadd">加入並開始學習</button>'
+    +'<label class="lv-learn"><input type="checkbox" id="lvLearn" checked> 今天開始學習（排進 +1／+3／+7／+14 複習）</label>'
+    +'<button class="vaddbtn" id="lvadd">加入單字庫</button>'
     +'<div class="vmsg" id="lvmsg"></div></div></div>';
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>全部單字 · '+all.length+'</h3>'
@@ -1017,7 +1020,8 @@ function renderLibPage(){
       const wEl=root.querySelector("#lvw"), mEl=root.querySelector("#lvm"), exEl=root.querySelector("#lvex"), nEl=root.querySelector("#lvn");
       const wv=wEl.value.trim(), mv=mEl.value.trim(), exv=exEl.value.trim(), nv=nEl.value.trim();
       if(!wv){ wEl.focus(); return; }
-      const msg=addLibWord(wv,mv,exv,nv);
+      const lc=root.querySelector("#lvLearn"); const learn=lc?lc.checked:true;
+      const msg=addLibWord(wv,mv,exv,nv,learn);
       const m2=document.querySelector("#lvmsg"); if(m2) m2.textContent=msg;
       const nw=document.querySelector("#lvw"); if(nw) nw.focus();
     };
