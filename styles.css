@@ -161,6 +161,9 @@
   .vhead .vm{font-size:13px;font-weight:600;color:var(--lock);}
   .vex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
   .ext{font-style:normal;color:var(--faint);font-size:11px;margin-top:1px;}
+  .say{background:none;border:none;cursor:pointer;padding:0 3px;font-size:12.5px;line-height:1;opacity:.5;vertical-align:middle;}
+  .say:hover{opacity:1;}
+  .fw .say{font-size:15px;}
   .flip .fex .ext{color:var(--faint);}
   .vn{font-size:11.5px;color:var(--faint);margin-top:3px;line-height:1.4;}
   .vn::before{content:"備註 ";font-weight:700;color:var(--due);}

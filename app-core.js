@@ -158,13 +158,27 @@ function allWords(){
 }
 // 顯示批次標籤：數字 = 第 N 批；lib = 單字庫
 function groupLabel(key){ return String(key)==="lib" ? "單字庫" : ("第 "+key+" 批"); }
+// 朗讀（Web Speech API）：英文 TTS
+function speak(text){
+  text=String(text||"").trim(); if(!text || !('speechSynthesis' in window)) return;
+  try{ window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=0.95; window.speechSynthesis.speak(u); }catch(e){}
+}
+function sayBtn(text){ const t=String(text||"").trim(); return t ? '<button class="say" data-say="'+esc(t)+'" title="朗讀" aria-label="朗讀">🔊</button>' : ""; }
+// 朗讀按鈕：用捕獲階段攔截，避免觸發翻卡/編輯等外層點擊
+document.addEventListener("click", function(e){
+  const b = e.target && e.target.closest ? e.target.closest("[data-say]") : null;
+  if(!b) return;
+  e.stopPropagation(); e.preventDefault();
+  speak(b.getAttribute("data-say"));
+}, true);
+
 // 例句：相容字串或 {e:英文, t:中文}
 function exE(x){ return (x && typeof x==="object") ? String(x.e||"") : String(x==null?"":x); }
 function exT(x){ return (x && typeof x==="object") ? String(x.t||"") : ""; }
-function exLineHTML(x, cls){ const e=exE(x), t=exT(x); if(!e && !t) return ""; return '<div class="'+cls+'">'+esc(e)+(t?'<div class="ext">'+esc(t)+'</div>':'')+'</div>'; }
+function exLineHTML(x, cls){ const e=exE(x), t=exT(x); if(!e && !t) return ""; return '<div class="'+cls+'">'+esc(e)+sayBtn(e)+(t?'<div class="ext">'+esc(t)+'</div>':'')+'</div>'; }
 function exsHTML(exs, cls){ return (exs&&exs.length)?exs.map(x=>exLineHTML(x, cls)).join(''):''; }
 function wordBodyHTML(w){
-  return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
+  return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span>'+sayBtn(w.w)+'<span class="vm">'+esc(w.m||'')+'</span></div>'
     +exsHTML(w.exs, "vex")
     +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'');
 }
@@ -343,7 +357,7 @@ function flipCardsHTML(srcDay){
   }
   return words.map((w,i)=>
     '<div class="flip" data-flip="'+srcDay+'-'+i+'">'
-    +'<div class="fw">'+esc(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -529,7 +543,7 @@ function renderLibrary(){
       filtered.forEach(o=>{
         const w=o.word;
         html+='<div class="flip">'
-          +'<div class="fw">'+esc(w.w)+'</div>'
+          +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
           +exsHTML(w.exs, "fex")
           +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
           +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -646,7 +660,7 @@ function addLibWord(wv, mv, exv, ext, nv, learn){
 function libReviewCardHTML(day, idx, w){
   const k=day+":"+idx, ri=w.ri||0;
   return '<div class="flip librev">'
-    +'<div class="fw">'+esc(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -670,7 +684,7 @@ function libRowHTML(day, idx, w){
 // 自由練習用的翻卡（無記得/忘了按鈕，只翻開看意思）
 function libFlipCardHTML(day, w){
   return '<div class="flip">'
-    +'<div class="fw">'+esc(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
