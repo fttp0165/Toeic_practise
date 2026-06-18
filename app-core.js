@@ -242,17 +242,17 @@ function bumpPractice(correct, wordObj){
   wordObj.pr[d]={c:e.c||0, x:e.x||0};
   // 持久化由呼叫端的 saveVocab 負責（pr 在 vocab 內）
 }
-// 每日總計（目前庫）：逐字 pr 加總 → { date: {c,x} }
+// 每日總計（全部單字庫）：逐字 pr 加總 → { date: {c,x} }
 function dailyAgg(){
   const agg={};
   const add=(date,c,x)=>{ const e=agg[date]||{c:0,x:0}; e.c+=c; e.x+=x; agg[date]=e; };
-  libWords().forEach(o=>{ const pr=o.word.pr; if(!pr) return; Object.keys(pr).forEach(date=>{ const e=pr[date]; add(date,(e&&e.c)||0,(e&&e.x)||0); }); });
+  allWords().forEach(o=>{ const pr=o.word.pr; if(!pr) return; Object.keys(pr).forEach(date=>{ const e=pr[date]; add(date,(e&&e.c)||0,(e&&e.x)||0); }); });
   return agg;
 }
-// 逐字練習紀錄（目前庫）：依日期分組（新→舊），每組列出該日練過的字
+// 逐字練習紀錄（全部單字庫）：依日期分組（新→舊），每組列出該日練過的字
 function practiceRecords(){
   const byDate={};
-  libWords().forEach(o=>{
+  allWords().forEach(o=>{
     const pr=o.word.pr; if(!pr) return;
     Object.keys(pr).forEach(date=>{
       const e=pr[date], c=(e&&e.c)||0, x=(e&&e.x)||0; if(!(c||x)) return;
@@ -883,54 +883,6 @@ function renderLibPage(){
     +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
     +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
 
-  // 練習紀錄面板（每日練習：對／錯）— 由逐字 pr 加總
-  const agg=dailyAgg();
-  const recent=recentLog(14, agg);
-  let totC=0, totX=0; Object.keys(agg).forEach(k=>{ totC+=agg[k].c||0; totX+=agg[k].x||0; });
-  const totN=totC+totX, acc = totN ? Math.round(totC/totN*100) : 0;
-  const tAgg=agg[todayISO()]||{c:0,x:0}; const t={c:tAgg.c||0, x:tAgg.x||0, n:(tAgg.c||0)+(tAgg.x||0)};
-  const maxN=Math.max(1,...recent.map(d=>d.n));
-  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>練習紀錄</h3>';
-  html+='<div class="rec-top">'
-    +'<div><span class="rec-big">'+t.n+'</span><span class="rec-lab">今天練習</span><div class="rec-sub">對 '+t.c+' · 錯 '+t.x+'</div></div>'
-    +'<div><span class="rec-big">'+totN+'</span><span class="rec-lab">累計</span><div class="rec-sub">對 '+totC+' · 錯 '+totX+'</div></div>'
-    +'<div><span class="rec-big">'+acc+'%</span><span class="rec-lab">正確率</span></div></div>';
-  html+='<div class="rec-chart">'+recent.map(d=>{
-    const totH = d.n ? Math.max(8, Math.round(d.n/maxN*100)) : 0;
-    const cls = d.isToday?' today':'';
-    let bar;
-    if(d.n){
-      bar='<div class="rec-bar-stack'+cls+'" style="height:'+totH+'%" title="'+d.iso+'：對 '+d.c+'，錯 '+d.x+'">'
-        +(d.x?'<div class="rec-seg wrong" style="flex:'+d.x+'"></div>':'')
-        +(d.c?'<div class="rec-seg right" style="flex:'+d.c+'"></div>':'')+'</div>';
-    } else {
-      bar='<div class="rec-bar empty" title="'+d.iso+'：0"></div>';
-    }
-    return '<div class="rec-col"><div class="rec-bararea">'+bar+'</div>'
-      +'<div class="rec-x'+cls+'">'+d.md+'</div></div>';
-  }).join('')+'</div>';
-  html+='<div class="rec-legend"><span class="lg right"></span>答對 <span class="lg wrong"></span>答錯 · 測驗作答與「記得／忘了」都計入</div>';
-  html+='</div>';
-
-  // 逐字練習紀錄（依日期分組，新→舊）
-  const recs=practiceRecords();
-  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>逐字練習紀錄</h3>';
-  if(!recs.length){
-    html+='<div class="lp-empty">還沒有逐字紀錄。做測驗、或按「記得／忘了」後，每個字的對錯會記在這裡。</div>';
-  } else {
-    recs.slice(0,30).forEach(g=>{
-      const p=g.date.split("-");
-      html+='<div class="pr-group"><div class="pr-date">'+(+p[1])+'/'+(+p[2])+'</div>';
-      g.items.forEach(it=>{
-        html+='<div class="pr-row"><span class="pr-w">'+esc(it.w)+'</span>'
-          +'<span class="pr-stat">練習 '+it.n+' · <b class="ok">對 '+it.c+'</b> · <b class="no">錯 '+it.x+'</b></span></div>';
-      });
-      html+='</div>';
-    });
-    if(recs.length>30) html+='<div class="lib-cardnote">只顯示最近 30 天。</div>';
-  }
-  html+='</div>';
-
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
   if(due.length){
     html+='<div class="lib-cardnote">先回想中文，點開驗證，再選「記得／忘了」。</div><div class="lib-cards">';
@@ -939,20 +891,14 @@ function renderLibPage(){
   } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
   html+='</div>';
 
-  // 測驗（依學習日期選一組字考）
-  const qdates=learnDates();
+  // 測驗（只考今天學的字）
+  const todayWords=quizPool(todayISO());
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>單字測驗</h3>';
-  if(qdates.length){
-    const today=todayISO(), sel=quizDefaultDate();
-    const selCount=(qdates.find(d=>d.date===sel)||{}).count||0;
-    html+='<div class="quiz-pick"><label for="quizDate">學習日期</label><select id="quizDate">';
-    qdates.forEach(d=>{
-      html+='<option value="'+d.date+'"'+(d.date===sel?' selected':'')+'>'+d.date+(d.date===today?'（今天）':'')+' · '+d.count+' 字</option>';
-    });
-    html+='</select><button class="vaddbtn" data-quiz-start="1">📝 開始測驗（'+selCount+' 字）</button></div>';
-    html+='<div class="lib-cardnote">考所選日期學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
+  if(todayWords.length){
+    html+='<button class="vaddbtn" data-quiz-start="1">📝 開始測驗（今天 '+todayWords.length+' 字）</button>';
+    html+='<div class="lib-cardnote">考今天新學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
   } else {
-    html+='<div class="lp-empty">還沒有開始學習的單字。把字選為「今天新學」或新增單字後就能測驗。</div>';
+    html+='<div class="lp-empty">今天還沒有新學的單字。把字選為「今天新學」或新增單字（勾「今天開始學習」）後就能測驗。</div>';
   }
   html+='</div>';
 
@@ -1008,8 +954,7 @@ function renderLibPage(){
       const m=document.querySelector("#libIoMsg"); if(m) m.textContent=msg;
     });
   };
-  const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
-  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
+  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>startQuiz(todayISO());
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
@@ -1031,7 +976,60 @@ function renderLibPage(){
   }
 }
 
-function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); }
+/* ---------- 練習紀錄頁（Dashboard，全部單字庫合計） ---------- */
+function renderDashboard(){
+  const root=$("#dashArea"); if(!root) return;
+  const agg=dailyAgg();
+  const recent=recentLog(14, agg);
+  let totC=0, totX=0; Object.keys(agg).forEach(k=>{ totC+=agg[k].c||0; totX+=agg[k].x||0; });
+  const totN=totC+totX, acc = totN ? Math.round(totC/totN*100) : 0;
+  const tAgg=agg[todayISO()]||{c:0,x:0}; const t={c:tAgg.c||0, x:tAgg.x||0, n:(tAgg.c||0)+(tAgg.x||0)};
+  const maxN=Math.max(1,...recent.map(d=>d.n));
+
+  let html='<div class="lp-intro"><div class="kicker">海馬迴間隔複習</div>'
+    +'<h2>練習紀錄</h2><div class="sub">所有單字庫合計 · 每日對錯與逐字明細</div></div>';
+
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--lock)"></span>每日練習</h3>';
+  html+='<div class="rec-top">'
+    +'<div><span class="rec-big">'+t.n+'</span><span class="rec-lab">今天練習</span><div class="rec-sub">對 '+t.c+' · 錯 '+t.x+'</div></div>'
+    +'<div><span class="rec-big">'+totN+'</span><span class="rec-lab">累計</span><div class="rec-sub">對 '+totC+' · 錯 '+totX+'</div></div>'
+    +'<div><span class="rec-big">'+acc+'%</span><span class="rec-lab">正確率</span></div></div>';
+  html+='<div class="rec-chart">'+recent.map(d=>{
+    const totH = d.n ? Math.max(8, Math.round(d.n/maxN*100)) : 0;
+    const cls = d.isToday?' today':'';
+    let bar;
+    if(d.n){
+      bar='<div class="rec-bar-stack'+cls+'" style="height:'+totH+'%" title="'+d.iso+'：對 '+d.c+'，錯 '+d.x+'">'
+        +(d.x?'<div class="rec-seg wrong" style="flex:'+d.x+'"></div>':'')
+        +(d.c?'<div class="rec-seg right" style="flex:'+d.c+'"></div>':'')+'</div>';
+    } else { bar='<div class="rec-bar empty" title="'+d.iso+'：0"></div>'; }
+    return '<div class="rec-col"><div class="rec-bararea">'+bar+'</div><div class="rec-x'+cls+'">'+d.md+'</div></div>';
+  }).join('')+'</div>';
+  html+='<div class="rec-legend"><span class="lg right"></span>答對 <span class="lg wrong"></span>答錯 · 測驗作答與「記得／忘了」都計入</div>';
+  html+='</div>';
+
+  const recs=practiceRecords();
+  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>逐字練習紀錄</h3>';
+  if(!recs.length){
+    html+='<div class="lp-empty">還沒有逐字紀錄。做測驗、或按「記得／忘了」後，每個字的對錯會記在這裡。</div>';
+  } else {
+    recs.slice(0,30).forEach(g=>{
+      const p=g.date.split("-");
+      html+='<div class="pr-group"><div class="pr-date">'+(+p[1])+'/'+(+p[2])+'</div>';
+      g.items.forEach(it=>{
+        html+='<div class="pr-row"><span class="pr-w">'+esc(it.w)+'</span>'
+          +'<span class="pr-stat">練習 '+it.n+' · <b class="ok">對 '+it.c+'</b> · <b class="no">錯 '+it.x+'</b></span></div>';
+      });
+      html+='</div>';
+    });
+    if(recs.length>30) html+='<div class="lib-cardnote">只顯示最近 30 天。</div>';
+  }
+  html+='</div>';
+
+  root.innerHTML=html;
+}
+
+function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");          // 只有 20 天衝刺頁(index.html)有這些元件
