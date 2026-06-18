@@ -91,6 +91,13 @@ function migrateVocab(v){
     arr.forEach(w=>{
       if(!Array.isArray(w.exs)) w.exs = (w.ex && String(w.ex).trim()) ? [String(w.ex).trim()] : [];
       if("ex" in w) delete w.ex;
+      // 加入日期 da：回填為最早已知日期（學習日 lo 與練習紀錄 pr 中最早者）
+      if(!w.da){
+        const cands=[];
+        if(w.lo) cands.push(w.lo);
+        if(w.pr) Object.keys(w.pr).forEach(k=>cands.push(k));
+        if(cands.length){ cands.sort(); w.da=cands[0]; }
+      }
     });
   });
   return v;
@@ -613,7 +620,7 @@ function addLibWord(wv, mv, exv, nv, learn){
     return "「"+wv+"」已在「"+curLib+"」"+(learn?"，已設為今天新學":"")+(added?"，已新增例句":"");
   }
   if(!Array.isArray(vocab.lib)) vocab.lib=[];
-  const obj={w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib};
+  const obj={w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib, da:todayISO()};
   if(learn){ obj.lo=todayISO(); obj.ri=0; }
   vocab.lib.push(obj);
   saveVocab(); renderAll();
@@ -658,11 +665,11 @@ function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.fl
 // 有學習日期(lo)且 w/m 皆填的字，依日期分組計數（新到舊）
 function learnDates(){
   const map={};
-  libWords().forEach(o=>{ const w=o.word; if(w.lo && String(w.w||'').trim() && String(w.m||'').trim()) map[w.lo]=(map[w.lo]||0)+1; });
+  libWords().forEach(o=>{ const w=o.word; if(w.da && String(w.w||'').trim() && String(w.m||'').trim()) map[w.da]=(map[w.da]||0)+1; });
   return Object.keys(map).sort().reverse().map(d=>({date:d, count:map[d]}));
 }
 function quizPool(date){
-  return libWords().map(o=>o.word).filter(w=>w.lo===date && String(w.w||'').trim() && String(w.m||'').trim());
+  return libWords().map(o=>o.word).filter(w=>w.da===date && String(w.w||'').trim() && String(w.m||'').trim());
 }
 // 預設測驗日期：選過就用選的；否則今天(若今天有學)否則最近一天
 function quizDefaultDate(){
@@ -825,7 +832,7 @@ function applyCSV(text){
     const hit=findInCurLib(wv);
     if(hit){ dup++; const wd=hit.word; exs.forEach(e=>{ if(!(wd.exs||[]).some(x=>x.trim().toLowerCase()===e.toLowerCase())) (wd.exs=wd.exs||[]).push(e); }); if(mv&&!wd.m)wd.m=mv; if(nv&&!wd.n)wd.n=nv; continue; }
     if(!Array.isArray(vocab.lib)) vocab.lib=[];
-    vocab.lib.push({w:wv, m:mv, exs, n:nv, lib:curLib});
+    vocab.lib.push({w:wv, m:mv, exs, n:nv, lib:curLib, da:todayISO()});
     added++;
   }
   saveVocab(); renderAll();
@@ -897,12 +904,12 @@ function renderLibPage(){
   if(qdates.length){
     const today=todayISO(), sel=quizDefaultDate();
     const selCount=(qdates.find(d=>d.date===sel)||{}).count||0;
-    html+='<div class="quiz-pick"><label for="quizDate">學習日期</label><select id="quizDate">';
+    html+='<div class="quiz-pick"><label for="quizDate">加入日期</label><select id="quizDate">';
     qdates.forEach(d=>{
       html+='<option value="'+d.date+'"'+(d.date===sel?' selected':'')+'>'+d.date+(d.date===today?'（今天）':'')+' · '+d.count+' 字</option>';
     });
     html+='</select><button class="vaddbtn" data-quiz-start="1">📝 開始測驗（'+selCount+' 字）</button></div>';
-    html+='<div class="lib-cardnote">選一天，考那天學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
+    html+='<div class="lib-cardnote">選一天，考那天加入的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
   } else {
     html+='<div class="lp-empty">還沒有開始學習的單字。把字選為「今天新學」或新增單字（勾「今天開始學習」）後就能測驗。</div>';
   }
