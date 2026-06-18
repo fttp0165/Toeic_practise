@@ -177,6 +177,10 @@
   .wedit input,.wedit textarea{font:inherit;font-size:14px;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;background:#FBFCFB;color:var(--ink);width:100%;}
   .wedit textarea{resize:vertical;line-height:1.5;}
   .wedit input:focus,.wedit textarea:focus{outline:none;border-color:var(--lock);box-shadow:0 0 0 2px var(--lock-soft);}
+  .we-exs{display:flex;flex-direction:column;gap:7px;}
+  .we-expair{display:flex;flex-direction:column;gap:4px;padding:7px;border:1px dashed var(--line);border-radius:8px;}
+  .we-exadd{align-self:flex-start;background:none;border:1px dashed var(--line-strong);border-radius:8px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;}
+  .we-exadd:hover{border-color:var(--lock);color:var(--lock);}
   .we-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
   .we-save{background:var(--lock);color:#fff;border:none;border-radius:8px;padding:7px 16px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
   .we-cancel{background:none;border:1px solid var(--line-strong);border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}

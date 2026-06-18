@@ -168,13 +168,20 @@ function wordBodyHTML(w){
     +exsHTML(w.exs, "vex")
     +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'');
 }
+// 編輯表單裡的一組「例句英文＋中文翻譯」
+function exPairHTML(e, t){
+  return '<div class="we-expair">'
+    +'<input class="we-exE" value="'+esc(e||'')+'" placeholder="例句（可留空）" autocomplete="off">'
+    +'<input class="we-exT" value="'+esc(t||'')+'" placeholder="例句中文翻譯（可留空）" autocomplete="off"></div>';
+}
 function wordEditFormHTML(day, idx){
   const w=(vocab[day]||[])[idx]; if(!w) return "";
-  const exsText=(w.exs||[]).map(x=>exE(x)+(exT(x)?" | "+exT(x):"")).join("\n");
+  const pairs=(w.exs||[]).map(x=>exPairHTML(exE(x), exT(x))).join('') + exPairHTML('', '');
   return '<div class="wedit" data-k="'+day+':'+idx+'">'
     +'<input class="we-w" value="'+esc(w.w||'')+'" placeholder="單字" autocomplete="off">'
     +'<input class="we-m" value="'+esc(w.m||'')+'" placeholder="中文意思" autocomplete="off">'
-    +'<textarea class="we-ex" rows="3" placeholder="例句（一行一句；中文翻譯接在 | 之後，例：Meet compliance. | 符合法規）">'+esc(exsText)+'</textarea>'
+    +'<div class="we-exs">'+pairs+'</div>'
+    +'<button type="button" class="we-exadd">＋ 再加一句例句</button>'
     +'<input class="we-n" value="'+esc(w.n||'')+'" placeholder="備註（可留空）" autocomplete="off">'
     +'<div class="we-row"><button class="we-save">儲存</button>'
     +'<button class="we-cancel">取消</button><span class="we-msg"></span></div></div>';
@@ -210,13 +217,11 @@ function saveWordEdit(form){
   if(hit && !(hit.day===day && hit.idx===idx)){
     msgEl.textContent="單字庫已有「"+nw+"」（在"+groupLabel(hit.day)+"）"; return;
   }
-  // 例句：一行一句（英文 | 中文），trim、去空行、依英文去重（不分大小寫，保留順序）
+  // 例句：每組「英文＋中文」，去空、依英文去重（不分大小寫，保留順序）
   const seen=new Set(), exs=[];
-  form.querySelector(".we-ex").value.split("\n").forEach(line=>{
-    line=line.trim(); if(!line) return;
-    const bar=line.indexOf("|");
-    const e=(bar>=0?line.slice(0,bar):line).trim(); if(!e) return;
-    const t=bar>=0?line.slice(bar+1).trim():"";
+  form.querySelectorAll(".we-expair").forEach(p=>{
+    const e=p.querySelector(".we-exE").value.trim(); if(!e) return;
+    const t=p.querySelector(".we-exT").value.trim();
     const lk=e.toLowerCase(); if(seen.has(lk)) return; seen.add(lk); exs.push({e, t});
   });
   // 保留 lo/ri 等其他欄位（單字庫學習進度），只更新可編輯欄位
@@ -235,6 +240,8 @@ function wireWordControls(root){
   root.querySelectorAll(".wedit").forEach(form=>{
     form.querySelector(".we-save").onclick=()=>saveWordEdit(form);
     form.querySelector(".we-cancel").onclick=()=>{ editing=null; renderAll(); };
+    const exadd=form.querySelector(".we-exadd");
+    if(exadd) exadd.onclick=()=>{ const box=form.querySelector(".we-exs"); if(box){ box.insertAdjacentHTML("beforeend", exPairHTML("","")); const ins=box.querySelectorAll(".we-expair input.we-exE"); if(ins.length) ins[ins.length-1].focus(); } };
   });
   root.querySelectorAll(".flip").forEach(el=>{ el.onclick=()=>el.classList.toggle("shown"); });
 }
