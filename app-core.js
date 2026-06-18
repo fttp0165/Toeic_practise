@@ -158,18 +158,52 @@ function allWords(){
 }
 // 顯示批次標籤：數字 = 第 N 批；lib = 單字庫
 function groupLabel(key){ return String(key)==="lib" ? "單字庫" : ("第 "+key+" 批"); }
-// 朗讀（Web Speech API）：英文 TTS
+// 朗讀（Web Speech API）：英文 TTS，自動挑較好的英文聲音
+let _voice=null;
+function pickVoice(){
+  if(!('speechSynthesis' in window)) return null;
+  const vs=window.speechSynthesis.getVoices(); if(!vs.length) return null;
+  const pool=vs.filter(v=>/^en(-|_|$)/i.test(v.lang)); const list=pool.length?pool:vs;
+  const prefs=[/google.*us.*english/i,/natural/i,/online/i,/microsoft.*(aria|jenny|guy|ava)/i,/samantha/i,/^google/i];
+  for(const re of prefs){ const m=list.find(v=>re.test(v.name)); if(m) return m; }
+  return list.find(v=>/en[-_]?us/i.test(v.lang)) || list[0];
+}
+if('speechSynthesis' in window){ try{ window.speechSynthesis.onvoiceschanged=()=>{ _voice=pickVoice(); }; _voice=pickVoice(); }catch(e){} }
 function speak(text){
   text=String(text||"").trim(); if(!text || !('speechSynthesis' in window)) return;
-  try{ window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=0.95; window.speechSynthesis.speak(u); }catch(e){}
+  try{
+    window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=0.95;
+    if(!_voice) _voice=pickVoice(); if(_voice) u.voice=_voice;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
 }
-function sayBtn(text){ const t=String(text||"").trim(); return t ? '<button class="say" data-say="'+esc(t)+'" title="朗讀" aria-label="朗讀">🔊</button>' : ""; }
+// 單字：先抓 Free Dictionary API 的真人發音，抓不到/失敗就退回 Web Speech
+const _wordAudio={};   // word -> mp3 網址；""＝查過但沒有
+function playAudio(url, fallback){ try{ const a=new Audio(url); const p=a.play(); if(p&&p.catch) p.catch(()=>speak(fallback)); }catch(e){ speak(fallback); } }
+function sayWord(word){
+  word=String(word||"").trim(); if(!word) return;
+  const key=word.toLowerCase();
+  if(_wordAudio[key]!==undefined){ if(_wordAudio[key]) playAudio(_wordAudio[key], word); else speak(word); return; }
+  fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(key))
+    .then(r=> r.ok ? r.json() : Promise.reject())
+    .then(data=>{
+      let url="";
+      (Array.isArray(data)?data:[]).some(en=> (en.phonetics||[]).some(p=>{ if(p&&p.audio){ url=p.audio; return true; } return false; }));
+      if(url && url.indexOf("//")===0) url="https:"+url;
+      _wordAudio[key]=url;
+      if(url) playAudio(url, word); else speak(word);
+    })
+    .catch(()=>{ _wordAudio[key]=""; speak(word); });
+}
+function sayBtn(text, isWord){ const t=String(text||"").trim(); return t ? '<button class="say" data-say="'+esc(t)+'"'+(isWord?' data-word="1"':'')+' title="朗讀" aria-label="朗讀">🔊</button>' : ""; }
 // 朗讀按鈕：用捕獲階段攔截，避免觸發翻卡/編輯等外層點擊
 document.addEventListener("click", function(e){
   const b = e.target && e.target.closest ? e.target.closest("[data-say]") : null;
   if(!b) return;
   e.stopPropagation(); e.preventDefault();
-  speak(b.getAttribute("data-say"));
+  const t=b.getAttribute("data-say");
+  if(b.getAttribute("data-word")) sayWord(t); else speak(t);
 }, true);
 
 // 例句：相容字串或 {e:英文, t:中文}
@@ -178,7 +212,7 @@ function exT(x){ return (x && typeof x==="object") ? String(x.t||"") : ""; }
 function exLineHTML(x, cls){ const e=exE(x), t=exT(x); if(!e && !t) return ""; return '<div class="'+cls+'">'+esc(e)+sayBtn(e)+(t?'<div class="ext">'+esc(t)+'</div>':'')+'</div>'; }
 function exsHTML(exs, cls){ return (exs&&exs.length)?exs.map(x=>exLineHTML(x, cls)).join(''):''; }
 function wordBodyHTML(w){
-  return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span>'+sayBtn(w.w)+'<span class="vm">'+esc(w.m||'')+'</span></div>'
+  return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span>'+sayBtn(w.w, true)+'<span class="vm">'+esc(w.m||'')+'</span></div>'
     +exsHTML(w.exs, "vex")
     +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'');
 }
@@ -357,7 +391,7 @@ function flipCardsHTML(srcDay){
   }
   return words.map((w,i)=>
     '<div class="flip" data-flip="'+srcDay+'-'+i+'">'
-    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w, true)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -543,7 +577,7 @@ function renderLibrary(){
       filtered.forEach(o=>{
         const w=o.word;
         html+='<div class="flip">'
-          +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
+          +'<div class="fw">'+esc(w.w)+sayBtn(w.w, true)+'</div>'
           +exsHTML(w.exs, "fex")
           +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
           +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -660,7 +694,7 @@ function addLibWord(wv, mv, exv, ext, nv, learn){
 function libReviewCardHTML(day, idx, w){
   const k=day+":"+idx, ri=w.ri||0;
   return '<div class="flip librev">'
-    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w, true)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
@@ -684,7 +718,7 @@ function libRowHTML(day, idx, w){
 // 自由練習用的翻卡（無記得/忘了按鈕，只翻開看意思）
 function libFlipCardHTML(day, w){
   return '<div class="flip">'
-    +'<div class="fw">'+esc(w.w)+sayBtn(w.w)+'</div>'
+    +'<div class="fw">'+esc(w.w)+sayBtn(w.w, true)+'</div>'
     +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
