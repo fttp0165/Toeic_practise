@@ -89,7 +89,8 @@ function migrateVocab(v){
   Object.keys(v).forEach(day=>{
     const arr=v[day]; if(!Array.isArray(arr)) return;
     arr.forEach(w=>{
-      if(!Array.isArray(w.exs)) w.exs = (w.ex && String(w.ex).trim()) ? [String(w.ex).trim()] : [];
+      if(!Array.isArray(w.exs)) w.exs = (w.ex && String(w.ex).trim()) ? [{e:String(w.ex).trim(), t:""}] : [];
+      else w.exs = w.exs.map(x=> (x && typeof x==="object") ? {e:String(x.e||""), t:String(x.t||"")} : {e:String(x==null?"":x), t:""}).filter(x=>x.e);
       if("ex" in w) delete w.ex;
       // 加入日期 da：回填為最早已知日期（學習日 lo 與練習紀錄 pr 中最早者）
       if(!w.da){
@@ -157,18 +158,23 @@ function allWords(){
 }
 // 顯示批次標籤：數字 = 第 N 批；lib = 單字庫
 function groupLabel(key){ return String(key)==="lib" ? "單字庫" : ("第 "+key+" 批"); }
+// 例句：相容字串或 {e:英文, t:中文}
+function exE(x){ return (x && typeof x==="object") ? String(x.e||"") : String(x==null?"":x); }
+function exT(x){ return (x && typeof x==="object") ? String(x.t||"") : ""; }
+function exLineHTML(x, cls){ const e=exE(x), t=exT(x); if(!e && !t) return ""; return '<div class="'+cls+'">'+esc(e)+(t?'<div class="ext">'+esc(t)+'</div>':'')+'</div>'; }
+function exsHTML(exs, cls){ return (exs&&exs.length)?exs.map(x=>exLineHTML(x, cls)).join(''):''; }
 function wordBodyHTML(w){
   return '<div class="vhead"><span class="vw">'+esc(w.w)+'</span><span class="vm">'+esc(w.m||'')+'</span></div>'
-    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="vex">'+esc(e)+'</div>').join(''):'')
+    +exsHTML(w.exs, "vex")
     +(w.n?'<div class="vn">'+esc(w.n)+'</div>':'');
 }
 function wordEditFormHTML(day, idx){
   const w=(vocab[day]||[])[idx]; if(!w) return "";
-  const exsText=(w.exs||[]).join("\n");
+  const exsText=(w.exs||[]).map(x=>exE(x)+(exT(x)?" | "+exT(x):"")).join("\n");
   return '<div class="wedit" data-k="'+day+':'+idx+'">'
     +'<input class="we-w" value="'+esc(w.w||'')+'" placeholder="單字" autocomplete="off">'
     +'<input class="we-m" value="'+esc(w.m||'')+'" placeholder="中文意思" autocomplete="off">'
-    +'<textarea class="we-ex" rows="3" placeholder="例句（一行一句，可留空）">'+esc(exsText)+'</textarea>'
+    +'<textarea class="we-ex" rows="3" placeholder="例句（一行一句；中文翻譯接在 | 之後，例：Meet compliance. | 符合法規）">'+esc(exsText)+'</textarea>'
     +'<input class="we-n" value="'+esc(w.n||'')+'" placeholder="備註（可留空）" autocomplete="off">'
     +'<div class="we-row"><button class="we-save">儲存</button>'
     +'<button class="we-cancel">取消</button><span class="we-msg"></span></div></div>';
@@ -204,11 +210,14 @@ function saveWordEdit(form){
   if(hit && !(hit.day===day && hit.idx===idx)){
     msgEl.textContent="單字庫已有「"+nw+"」（在"+groupLabel(hit.day)+"）"; return;
   }
-  // 例句：一行一句，trim、去空行、去重（不分大小寫，保留順序）
+  // 例句：一行一句（英文 | 中文），trim、去空行、依英文去重（不分大小寫，保留順序）
   const seen=new Set(), exs=[];
   form.querySelector(".we-ex").value.split("\n").forEach(line=>{
-    const e=line.trim(); if(!e) return;
-    const lk=e.toLowerCase(); if(seen.has(lk)) return; seen.add(lk); exs.push(e);
+    line=line.trim(); if(!line) return;
+    const bar=line.indexOf("|");
+    const e=(bar>=0?line.slice(0,bar):line).trim(); if(!e) return;
+    const t=bar>=0?line.slice(bar+1).trim():"";
+    const lk=e.toLowerCase(); if(seen.has(lk)) return; seen.add(lk); exs.push({e, t});
   });
   // 保留 lo/ri 等其他欄位（單字庫學習進度），只更新可編輯欄位
   arr[idx]=Object.assign({}, arr[idx], {w:nw, m:nm, exs:exs, n:nn});
@@ -328,7 +337,7 @@ function flipCardsHTML(srcDay){
   return words.map((w,i)=>
     '<div class="flip" data-flip="'+srcDay+'-'+i+'">'
     +'<div class="fw">'+esc(w.w)+'</div>'
-    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+    +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
     +'<div class="hintr">點按看意思</div></div>'
@@ -412,6 +421,7 @@ function renderDay(){
       +'<input id="vw" placeholder="單字 (例 compliance)" autocomplete="off">'
       +'<input id="vm" placeholder="中文意思 (例 合規 / 法規遵循)" autocomplete="off">'
       +'<input id="vex" placeholder="例句（可留空）" autocomplete="off">'
+      +'<input id="vext" placeholder="例句中文翻譯（可留空）" autocomplete="off">'
       +'<input id="vn" placeholder="備註（可留空，例 工作常用 / 易混淆）" autocomplete="off">'
       +'<button class="vaddbtn" id="vadd">加入這個字</button>'
       +'<div class="vmsg" id="vmsg"></div></div>';
@@ -445,23 +455,23 @@ function renderDay(){
   const addBtn=area.querySelector("#vadd");
   if(addBtn){
     const commit=()=>{
-      const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex"), nEl=area.querySelector("#vn");
-      const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim(), n=nEl.value.trim();
+      const wEl=area.querySelector("#vw"), mEl=area.querySelector("#vm"), exEl=area.querySelector("#vex"), extEl=area.querySelector("#vext"), nEl=area.querySelector("#vn");
+      const w=wEl.value.trim(), m=mEl.value.trim(), ex=exEl.value.trim(), ext=extEl.value.trim(), n=nEl.value.trim();
       if(!w){ wEl.focus(); return; }
       let msg="";
       const hit=findWordGlobal(w);
       if(hit){
         // 已在單字庫 → 不重複建立；不同例句就補進同一個字
         const wd=hit.word;
-        const dup = ex && wd.exs.some(e=>e.trim().toLowerCase()===ex.toLowerCase());
+        const dup = ex && (wd.exs||[]).some(x=>exE(x).trim().toLowerCase()===ex.toLowerCase());
         let added=false;
-        if(ex && !dup){ wd.exs.push(ex); added=true; }
+        if(ex && !dup){ (wd.exs=wd.exs||[]).push({e:ex, t:ext}); added=true; }
         if(m && !wd.m) wd.m=m;          // 補上原本沒填的意思
         if(n && !wd.n) wd.n=n;          // 補上原本沒填的備註
         msg="「"+w+"」已在"+groupLabel(hit.day)+(added?"，已新增例句":"（未重複建立）");
       } else {
         if(!vocab[d]) vocab[d]=[];
-        vocab[d].push({w, m, exs: ex?[ex]:[], n});
+        vocab[d].push({w, m, exs: ex?[{e:ex, t:ext}]:[], n});
       }
       saveVocab(); renderAll();
       // 顯示提示 + 重新聚焦單字欄，方便連續輸入
@@ -497,7 +507,7 @@ function renderLibrary(){
       const w=o.word;
       return String(w.w||'').toLowerCase().includes(q)
         || String(w.m||'').toLowerCase().includes(q)
-        || (w.exs||[]).some(e=>String(e).toLowerCase().includes(q))
+        || (w.exs||[]).some(x=>exE(x).toLowerCase().includes(q)||exT(x).toLowerCase().includes(q))
         || String(w.n||'').toLowerCase().includes(q);
     };
     const filtered = q ? all.filter(matches) : all;
@@ -513,7 +523,7 @@ function renderLibrary(){
         const w=o.word;
         html+='<div class="flip">'
           +'<div class="fw">'+esc(w.w)+'</div>'
-          +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+          +exsHTML(w.exs, "fex")
           +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
           +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
           +'<div class="hintr">點按看意思</div>'
@@ -606,13 +616,13 @@ function startLearning(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; 
 function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri=(w.ri||0)+1; bumpPractice(true, w);  saveVocab(); renderAll(); }
 function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false, w); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
-function addLibWord(wv, mv, exv, nv, learn){
+function addLibWord(wv, mv, exv, ext, nv, learn){
   const hit=findInCurLib(wv);   // 同庫內去重
   if(hit){
     const wd=hit.word;
-    const dup = exv && (wd.exs||[]).some(e=>e.trim().toLowerCase()===exv.toLowerCase());
+    const dup = exv && (wd.exs||[]).some(x=>exE(x).trim().toLowerCase()===exv.toLowerCase());
     let added=false;
-    if(exv && !dup){ (wd.exs=wd.exs||[]).push(exv); added=true; }
+    if(exv && !dup){ (wd.exs=wd.exs||[]).push({e:exv, t:ext||""}); added=true; }
     if(mv && !wd.m) wd.m=mv;
     if(nv && !wd.n) wd.n=nv;
     if(learn){ wd.lo=todayISO(); wd.ri=0; }
@@ -620,7 +630,7 @@ function addLibWord(wv, mv, exv, nv, learn){
     return "「"+wv+"」已在「"+curLib+"」"+(learn?"，已設為今天新學":"")+(added?"，已新增例句":"");
   }
   if(!Array.isArray(vocab.lib)) vocab.lib=[];
-  const obj={w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib, da:todayISO()};
+  const obj={w:wv, m:mv, exs: exv?[{e:exv, t:ext||""}]:[], n:nv, lib:curLib, da:todayISO()};
   if(learn){ obj.lo=todayISO(); obj.ri=0; }
   vocab.lib.push(obj);
   saveVocab(); renderAll();
@@ -630,7 +640,7 @@ function libReviewCardHTML(day, idx, w){
   const k=day+":"+idx, ri=w.ri||0;
   return '<div class="flip librev">'
     +'<div class="fw">'+esc(w.w)+'</div>'
-    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+    +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
     +'<div class="hintr">點按看意思</div>'
@@ -654,7 +664,7 @@ function libRowHTML(day, idx, w){
 function libFlipCardHTML(day, w){
   return '<div class="flip">'
     +'<div class="fw">'+esc(w.w)+'</div>'
-    +((w.exs&&w.exs.length)?w.exs.map(e=>'<div class="fex">'+esc(e)+'</div>').join(''):'')
+    +exsHTML(w.exs, "fex")
     +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
     +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
     +'<div class="hintr">點按看意思</div>'
@@ -799,8 +809,8 @@ function showNewLibForm(root){
 /* ---------- 匯入 / 匯出 ---------- */
 function csvEsc(s){ s=String(s==null?"":s); return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
 function buildCSV(words){
-  const rows=[["word","meaning","example","note"]];
-  (words||[]).forEach(w=>rows.push([w.w||"", w.m||"", (w.exs||[]).join(" | "), w.n||""]));
+  const rows=[["word","meaning","example","example_zh","note"]];
+  (words||[]).forEach(w=>rows.push([w.w||"", w.m||"", (w.exs||[]).map(exE).join(" | "), (w.exs||[]).map(exT).join(" | "), w.n||""]));
   return rows.map(r=>r.map(csvEsc).join(",")).join("\r\n");
 }
 function parseCSV(text){
@@ -822,15 +832,24 @@ function parseCSV(text){
 function applyCSV(text){
   const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()!==""));
   if(!rows.length) return {added:0, dup:0};
-  let start=0; const h=rows[0].map(c=>String(c).trim().toLowerCase());
-  if(h[0]==="word"||h[0]==="單字"||h.indexOf("meaning")>=0||h.indexOf("中文")>=0) start=1;
+  const h=rows[0].map(c=>String(c).trim().toLowerCase());
+  const hasHeader = (h[0]==="word"||h[0]==="單字"||h.indexOf("meaning")>=0||h.indexOf("中文")>=0||h.indexOf("example")>=0||h.indexOf("例句")>=0);
+  // 欄位對應（相容舊 4 欄：word,meaning,example,note）
+  const ci={w:0,m:1,ex:2,exzh:-1,n:3};
+  if(hasHeader){
+    const z=h.findIndex(x=>/example_zh|例句中文|例句翻譯|翻譯/.test(x)); if(z>=0) ci.exzh=z;
+    const ni=h.findIndex(x=>x==="note"||/備註/.test(x)); if(ni>=0) ci.n=ni; else if(ci.exzh>=0) ci.n=4;
+  }
+  const start = hasHeader ? 1 : 0;
   let added=0, dup=0;
   for(let i=start;i<rows.length;i++){
-    const r=rows[i], wv=String(r[0]||"").trim(); if(!wv) continue;
-    const mv=String(r[1]||"").trim(), exv=String(r[2]||"").trim(), nv=String(r[3]||"").trim();
-    const exs=exv?exv.split("|").map(s=>s.trim()).filter(Boolean):[];
+    const r=rows[i], wv=String(r[ci.w]||"").trim(); if(!wv) continue;
+    const mv=String(r[ci.m]||"").trim(), nv=String(r[ci.n]||"").trim();
+    const eArr=String(r[ci.ex]||"").split("|").map(s=>s.trim());
+    const tArr=ci.exzh>=0 ? String(r[ci.exzh]||"").split("|").map(s=>s.trim()) : [];
+    const exs=[]; eArr.forEach((e,k)=>{ if(e) exs.push({e, t:(tArr[k]||"")}); });
     const hit=findInCurLib(wv);
-    if(hit){ dup++; const wd=hit.word; exs.forEach(e=>{ if(!(wd.exs||[]).some(x=>x.trim().toLowerCase()===e.toLowerCase())) (wd.exs=wd.exs||[]).push(e); }); if(mv&&!wd.m)wd.m=mv; if(nv&&!wd.n)wd.n=nv; continue; }
+    if(hit){ dup++; const wd=hit.word; exs.forEach(nx=>{ if(!(wd.exs||[]).some(x=>exE(x).trim().toLowerCase()===nx.e.toLowerCase())) (wd.exs=wd.exs||[]).push(nx); }); if(mv&&!wd.m)wd.m=mv; if(nv&&!wd.n)wd.n=nv; continue; }
     if(!Array.isArray(vocab.lib)) vocab.lib=[];
     vocab.lib.push({w:wv, m:mv, exs, n:nv, lib:curLib, da:todayISO()});
     added++;
@@ -920,6 +939,7 @@ function renderLibPage(){
     +'<input id="lvw" placeholder="單字" autocomplete="off">'
     +'<input id="lvm" placeholder="中文意思" autocomplete="off">'
     +'<input id="lvex" placeholder="例句（可留空）" autocomplete="off">'
+    +'<input id="lvext" placeholder="例句中文翻譯（可留空）" autocomplete="off">'
     +'<input id="lvn" placeholder="備註（可留空）" autocomplete="off">'
     +'<label class="lv-learn"><input type="checkbox" id="lvLearn" checked> 今天開始學習（排進 +1／+3／+7／+14 複習）</label>'
     +'<button class="vaddbtn" id="lvadd">加入單字庫</button>'
@@ -934,7 +954,7 @@ function renderLibPage(){
   const filtered = q ? all.filter(o=>{
     const w=o.word;
     return String(w.w||'').toLowerCase().includes(q) || String(w.m||'').toLowerCase().includes(q)
-      || (w.exs||[]).some(e=>String(e).toLowerCase().includes(q)) || String(w.n||'').toLowerCase().includes(q);
+      || (w.exs||[]).some(x=>exE(x).toLowerCase().includes(q)||exT(x).toLowerCase().includes(q)) || String(w.n||'').toLowerCase().includes(q);
   }) : all;
   if(!all.length){ html+='<div class="lp-empty">單字庫還是空的。用上面的「新增單字」開始，或在 20 天衝刺裡輸入的字也會出現在這。</div>'; }
   else if(!filtered.length){ html+='<div class="lp-empty">找不到符合「'+esc(lpQuery)+'」的單字。</div>'; }
@@ -976,11 +996,11 @@ function renderLibPage(){
   const addBtn=root.querySelector("#lvadd");
   if(addBtn){
     const commit=()=>{
-      const wEl=root.querySelector("#lvw"), mEl=root.querySelector("#lvm"), exEl=root.querySelector("#lvex"), nEl=root.querySelector("#lvn");
-      const wv=wEl.value.trim(), mv=mEl.value.trim(), exv=exEl.value.trim(), nv=nEl.value.trim();
+      const wEl=root.querySelector("#lvw"), mEl=root.querySelector("#lvm"), exEl=root.querySelector("#lvex"), extEl=root.querySelector("#lvext"), nEl=root.querySelector("#lvn");
+      const wv=wEl.value.trim(), mv=mEl.value.trim(), exv=exEl.value.trim(), ext=extEl.value.trim(), nv=nEl.value.trim();
       if(!wv){ wEl.focus(); return; }
       const lc=root.querySelector("#lvLearn"); const learn=lc?lc.checked:true;
-      const msg=addLibWord(wv,mv,exv,nv,learn);
+      const msg=addLibWord(wv,mv,exv,ext,nv,learn);
       const m2=document.querySelector("#lvmsg"); if(m2) m2.textContent=msg;
       const nw=document.querySelector("#lvw"); if(nw) nw.focus();
     };

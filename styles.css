@@ -160,6 +160,8 @@
   .vhead .vw{font-weight:800;font-size:14.5px;color:var(--ink);}
   .vhead .vm{font-size:13px;font-weight:600;color:var(--lock);}
   .vex{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;}
+  .ext{font-style:normal;color:var(--faint);font-size:11px;margin-top:1px;}
+  .flip .fex .ext{color:var(--faint);}
   .vn{font-size:11.5px;color:var(--faint);margin-top:3px;line-height:1.4;}
   .vn::before{content:"備註 ";font-weight:700;color:var(--due);}
   .vdel{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:2px 4px;flex:0 0 auto;line-height:1;}
