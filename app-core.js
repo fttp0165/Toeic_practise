@@ -891,14 +891,20 @@ function renderLibPage(){
   } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
   html+='</div>';
 
-  // 測驗（只考今天學的字）
-  const todayWords=quizPool(todayISO());
+  // 測驗（可選學習日期）
+  const qdates=learnDates();
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>單字測驗</h3>';
-  if(todayWords.length){
-    html+='<button class="vaddbtn" data-quiz-start="1">📝 開始測驗（今天 '+todayWords.length+' 字）</button>';
-    html+='<div class="lib-cardnote">考今天新學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
+  if(qdates.length){
+    const today=todayISO(), sel=quizDefaultDate();
+    const selCount=(qdates.find(d=>d.date===sel)||{}).count||0;
+    html+='<div class="quiz-pick"><label for="quizDate">學習日期</label><select id="quizDate">';
+    qdates.forEach(d=>{
+      html+='<option value="'+d.date+'"'+(d.date===sel?' selected':'')+'>'+d.date+(d.date===today?'（今天）':'')+' · '+d.count+' 字</option>';
+    });
+    html+='</select><button class="vaddbtn" data-quiz-start="1">📝 開始測驗（'+selCount+' 字）</button></div>';
+    html+='<div class="lib-cardnote">選一天，考那天學的單字：隨機出「看中文打英文」或「看英文選中文」。</div>';
   } else {
-    html+='<div class="lp-empty">今天還沒有新學的單字。把字選為「今天新學」或新增單字（勾「今天開始學習」）後就能測驗。</div>';
+    html+='<div class="lp-empty">還沒有開始學習的單字。把字選為「今天新學」或新增單字（勾「今天開始學習」）後就能測驗。</div>';
   }
   html+='</div>';
 
@@ -954,7 +960,8 @@ function renderLibPage(){
       const m=document.querySelector("#libIoMsg"); if(m) m.textContent=msg;
     });
   };
-  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>startQuiz(todayISO());
+  const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
+  const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
