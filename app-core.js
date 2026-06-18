@@ -1,6 +1,7 @@
 "use strict";
 const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
-const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log"};
+const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs"};
+const LIB_DEFAULT="我的單字庫";
 
 /* ---------- phases ---------- */
 function phaseOf(d){
@@ -66,6 +67,11 @@ let log={};   // 練習紀錄 { "YYYY-MM-DD": {c:對, x:錯} }
 try{ log = JSON.parse(localStorage.getItem(LS.log)||"{}"); }catch(e){ log={}; }
 // 舊格式（單一數字＝總次數）→ {c, x}，把舊總數記為已答對以保留總量
 Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k], x:0}; });
+// 多單字庫（以 word.lib 標籤分庫；libs 保存庫名清單含空庫）
+let libs=[];
+try{ libs = JSON.parse(localStorage.getItem(LS.libs)||"[]"); }catch(e){ libs=[]; }
+if(!Array.isArray(libs)) libs=[];
+let curLib = localStorage.getItem("toeic20_curlib") || "";
 let viewing = 1;
 let editing = null;     // "day:idx" 正在編輯的單字，或 null
 let libOpen = false;    // 單字庫卡片是否展開
@@ -102,6 +108,34 @@ function findWordGlobal(word){
   return null;
 }
 migrateVocab(vocab);
+
+/* ---------- 多單字庫：標籤、庫名清單、目前庫 ---------- */
+function wlib(w){ return (w && w.lib) ? w.lib : LIB_DEFAULT; }
+// 整理：替單字庫的字補上 lib 標籤，並把出現過的庫名併進 libs，確保有預設庫與有效的 curLib
+function migrateLibs(){
+  (vocab.lib||[]).forEach(w=>{ if(!w.lib) w.lib=LIB_DEFAULT; });
+  const set=new Set(libs.filter(Boolean));
+  (vocab.lib||[]).forEach(w=>set.add(wlib(w)));
+  set.add(LIB_DEFAULT);
+  libs=Array.from(set);
+  if(!curLib || libs.indexOf(curLib)<0) curLib=libs[0];
+}
+migrateLibs();
+function libNames(){ return libs.slice(); }
+function saveLibs(){ localStorage.setItem(LS.libs, JSON.stringify(libs)); notifyChange(); }
+function setCurLib(name){ curLib=name; localStorage.setItem("toeic20_curlib", name); }
+// 目前庫的字（{day:"lib", idx:在 vocab.lib 的位置, word}）
+function libWords(){
+  const out=[]; (vocab.lib||[]).forEach((w,idx)=>{ if(wlib(w)===curLib) out.push({day:"lib", idx, word:w}); });
+  return out;
+}
+// 在目前庫內找同名字（trim＋不分大小寫）
+function findInCurLib(word){
+  const k=String(word||"").trim().toLowerCase(); if(!k) return null;
+  const arr=vocab.lib||[];
+  for(let i=0;i<arr.length;i++){ if(wlib(arr[i])===curLib && String(arr[i].w||"").trim().toLowerCase()===k) return {day:"lib", idx:i, word:arr[i]}; }
+  return null;
+}
 
 /* ---------- shared vocab word helpers (used by day list + library) ---------- */
 function allWords(){
@@ -191,7 +225,7 @@ function wireWordControls(root){
 
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
-function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log}); }
+function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}); }
 
 function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); notifyChange(); }
 function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); notifyChange(); }
@@ -208,18 +242,17 @@ function bumpPractice(correct, wordObj){
   wordObj.pr[d]={c:e.c||0, x:e.x||0};
   // 持久化由呼叫端的 saveVocab 負責（pr 在 vocab 內）
 }
-// 每日總計：逐字 pr 加總 ＋ 舊版彙總 log（避免遺失既有資料）→ { date: {c,x} }
+// 每日總計（目前庫）：逐字 pr 加總 → { date: {c,x} }
 function dailyAgg(){
   const agg={};
   const add=(date,c,x)=>{ const e=agg[date]||{c:0,x:0}; e.c+=c; e.x+=x; agg[date]=e; };
-  Object.keys(log).forEach(k=>{ const e=dayTotal(log[k]); add(k,e.c,e.x); });
-  allWords().forEach(o=>{ const pr=o.word.pr; if(!pr) return; Object.keys(pr).forEach(date=>{ const e=pr[date]; add(date,(e&&e.c)||0,(e&&e.x)||0); }); });
+  libWords().forEach(o=>{ const pr=o.word.pr; if(!pr) return; Object.keys(pr).forEach(date=>{ const e=pr[date]; add(date,(e&&e.c)||0,(e&&e.x)||0); }); });
   return agg;
 }
-// 逐字練習紀錄：依日期分組（新→舊），每組列出該日練過的字
+// 逐字練習紀錄（目前庫）：依日期分組（新→舊），每組列出該日練過的字
 function practiceRecords(){
   const byDate={};
-  allWords().forEach(o=>{
+  libWords().forEach(o=>{
     const pr=o.word.pr; if(!pr) return;
     Object.keys(pr).forEach(date=>{
       const e=pr[date], c=(e&&e.c)||0, x=(e&&e.x)||0; if(!(c||x)) return;
@@ -552,10 +585,10 @@ function libStatus(w){
   if(ds>=need) return {key:"due", label:"待複習"};
   return {key:"learn", label:(need-ds)+" 天後複習"};
 }
-function libDue(){ return allWords().filter(o=>libStatus(o.word).key==="due"); }
+function libDue(){ return libWords().filter(o=>libStatus(o.word).key==="due"); }
 function libCounts(){
   let learning=0, due=0, done=0;
-  allWords().forEach(o=>{
+  libWords().forEach(o=>{
     const w=o.word; if(!w.lo) return;
     const s=libStatus(w).key;
     if(s==="done") done++; else { learning++; if(s==="due") due++; }
@@ -567,7 +600,7 @@ function reviewYes(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.ri
 function reviewNo(day, idx){ const w=(vocab[day]||[])[idx]; if(!w) return; w.lo=todayISO(); w.ri=0; bumpPractice(false, w); saveVocab(); renderAll(); }
 // 新增單字進 lib 桶並立即開始學習；已存在則設為今天新學＋補例句
 function addLibWord(wv, mv, exv, nv){
-  const hit=findWordGlobal(wv);
+  const hit=findInCurLib(wv);   // 同庫內去重
   if(hit){
     const wd=hit.word;
     const dup = exv && (wd.exs||[]).some(e=>e.trim().toLowerCase()===exv.toLowerCase());
@@ -577,10 +610,10 @@ function addLibWord(wv, mv, exv, nv){
     if(nv && !wd.n) wd.n=nv;
     wd.lo=todayISO(); wd.ri=0;
     saveVocab(); renderAll();
-    return "「"+wv+"」已在"+groupLabel(hit.day)+"，已設為今天新學"+(added?"並新增例句":"");
+    return "「"+wv+"」已在「"+curLib+"」，已設為今天新學"+(added?"並新增例句":"");
   }
   if(!Array.isArray(vocab.lib)) vocab.lib=[];
-  vocab.lib.push({w:wv, m:mv, exs: exv?[exv]:[], n:nv, lo:todayISO(), ri:0});
+  vocab.lib.push({w:wv, m:mv, exs: exv?[exv]:[], n:nv, lib:curLib, lo:todayISO(), ri:0});
   saveVocab(); renderAll();
   return "";
 }
@@ -623,11 +656,11 @@ function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.fl
 // 有學習日期(lo)且 w/m 皆填的字，依日期分組計數（新到舊）
 function learnDates(){
   const map={};
-  allWords().forEach(o=>{ const w=o.word; if(w.lo && String(w.w||'').trim() && String(w.m||'').trim()) map[w.lo]=(map[w.lo]||0)+1; });
+  libWords().forEach(o=>{ const w=o.word; if(w.lo && String(w.w||'').trim() && String(w.m||'').trim()) map[w.lo]=(map[w.lo]||0)+1; });
   return Object.keys(map).sort().reverse().map(d=>({date:d, count:map[d]}));
 }
 function quizPool(date){
-  return allWords().map(o=>o.word).filter(w=>w.lo===date && String(w.w||'').trim() && String(w.m||'').trim());
+  return libWords().map(o=>o.word).filter(w=>w.lo===date && String(w.w||'').trim() && String(w.m||'').trim());
 }
 // 預設測驗日期：選過就用選的；否則今天(若今天有學)否則最近一天
 function quizDefaultDate(){
@@ -639,7 +672,7 @@ function quizDefaultDate(){
 function startQuiz(date){
   const pool = quizPool(date);
   if(!pool.length) return;
-  const meanings = Array.from(new Set(allWords().map(o=>String(o.word.m||'').trim()).filter(Boolean)));
+  const meanings = Array.from(new Set(libWords().map(o=>String(o.word.m||'').trim()).filter(Boolean)));
   const items = shuffle(pool).map(w=>{
     let type = Math.random()<0.5 ? 'type' : 'choice';
     let options=null;
@@ -730,13 +763,118 @@ function recentLog(days, agg){
   }
   return out;
 }
+
+/* ---------- 單字庫管理：新增/刪除 ---------- */
+function createLib(name){
+  name=String(name||"").trim(); if(!name) return false;
+  if(libs.indexOf(name)<0) libs.push(name);
+  setCurLib(name); saveLibs(); renderAll(); return true;
+}
+function deleteLib(name){
+  if(Array.isArray(vocab.lib)) vocab.lib = vocab.lib.filter(w=>wlib(w)!==name);
+  libs = libs.filter(n=>n!==name);
+  if(!libs.length) libs=[LIB_DEFAULT];
+  setCurLib(libs[0]);
+  saveLibs(); saveVocab(); renderAll();
+}
+function showNewLibForm(root){
+  const row=root.querySelector(".lib-pickrow"); if(!row) return;
+  row.innerHTML='<input id="libNewName" placeholder="新單字庫名稱" autocomplete="off"><button class="lib-tbtn" id="libCreate">建立</button><button class="lib-tbtn" id="libCancel">取消</button>';
+  const inp=root.querySelector("#libNewName"); inp.focus();
+  const create=()=>{ const v=inp.value.trim(); if(!v){ inp.focus(); return; } if(libNames().indexOf(v)>=0){ setCurLib(v); renderAll(); return; } createLib(v); };
+  root.querySelector("#libCreate").onclick=create;
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter") create(); });
+  root.querySelector("#libCancel").onclick=()=>renderLibPage();
+}
+
+/* ---------- 匯入 / 匯出 ---------- */
+function csvEsc(s){ s=String(s==null?"":s); return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function buildCSV(words){
+  const rows=[["word","meaning","example","note"]];
+  (words||[]).forEach(w=>rows.push([w.w||"", w.m||"", (w.exs||[]).join(" | "), w.n||""]));
+  return rows.map(r=>r.map(csvEsc).join(",")).join("\r\n");
+}
+function parseCSV(text){
+  const rows=[]; let row=[], field="", i=0, inq=false; text=String(text).replace(/\r\n?/g,"\n");
+  while(i<text.length){
+    const ch=text[i];
+    if(inq){
+      if(ch==='"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue; } inq=false; i++; continue; }
+      field+=ch; i++; continue;
+    }
+    if(ch==='"'){ inq=true; i++; continue; }
+    if(ch===','){ row.push(field); field=""; i++; continue; }
+    if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=""; i++; continue; }
+    field+=ch; i++;
+  }
+  row.push(field); rows.push(row);
+  return rows;
+}
+function applyCSV(text){
+  const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()!==""));
+  if(!rows.length) return {added:0, dup:0};
+  let start=0; const h=rows[0].map(c=>String(c).trim().toLowerCase());
+  if(h[0]==="word"||h[0]==="單字"||h.indexOf("meaning")>=0||h.indexOf("中文")>=0) start=1;
+  let added=0, dup=0;
+  for(let i=start;i<rows.length;i++){
+    const r=rows[i], wv=String(r[0]||"").trim(); if(!wv) continue;
+    const mv=String(r[1]||"").trim(), exv=String(r[2]||"").trim(), nv=String(r[3]||"").trim();
+    const exs=exv?exv.split("|").map(s=>s.trim()).filter(Boolean):[];
+    const hit=findInCurLib(wv);
+    if(hit){ dup++; const wd=hit.word; exs.forEach(e=>{ if(!(wd.exs||[]).some(x=>x.trim().toLowerCase()===e.toLowerCase())) (wd.exs=wd.exs||[]).push(e); }); if(mv&&!wd.m)wd.m=mv; if(nv&&!wd.n)wd.n=nv; continue; }
+    if(!Array.isArray(vocab.lib)) vocab.lib=[];
+    vocab.lib.push({w:wv, m:mv, exs, n:nv, lib:curLib});
+    added++;
+  }
+  saveVocab(); renderAll();
+  return {added, dup};
+}
+function buildBackupJSON(){
+  return JSON.stringify({ _app:"toeic20", _v:1, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs }, null, 2);
+}
+function applyBackupJSON(text){
+  let obj; try{ obj=JSON.parse(text); }catch(e){ return {ok:false, err:"JSON 格式錯誤"}; }
+  if(!obj || typeof obj!=="object" || (obj._app && obj._app!=="toeic20")) return {ok:false, err:"不是有效的備份檔"};
+  startDate=obj.start||""; done=obj.tasks||{}; vocab=obj.vocab||{}; log=obj.log||{}; libs=Array.isArray(obj.libs)?obj.libs:[];
+  Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k],x:0}; });
+  migrateVocab(vocab); migrateLibs();
+  localStorage.setItem(LS.start,startDate);
+  localStorage.setItem(LS.tasks,JSON.stringify(done));
+  localStorage.setItem(LS.vocab,JSON.stringify(vocab));
+  localStorage.setItem(LS.log,JSON.stringify(log));
+  localStorage.setItem(LS.libs,JSON.stringify(libs));
+  if(startInput) startInput.value=startDate;
+  notifyChange(); renderAll();
+  return {ok:true};
+}
+function downloadFile(filename, text, mime){
+  const blob=new Blob([text], {type:mime||"text/plain"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ if(a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 0);
+}
+
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
   if(quiz){ root.innerHTML=quizHTML(); wireQuiz(root); return; }   // 測驗中：全頁顯示測驗
-  const all=allWords(), c=libCounts(), due=libDue();
+  const all=libWords(), c=libCounts(), due=libDue();
 
   let html='<div class="lp-intro"><div class="kicker">海馬迴間隔複習</div>'
-    +'<h2>單字庫</h2><div class="sub">不分天數的長期單字庫 · 依真實日期排 +1／+3／+7／+14 複習</div></div>';
+    +'<h2>單字庫</h2><div class="sub">分主題的長期單字庫 · 依真實日期排 +1／+3／+7／+14 複習</div></div>';
+
+  // 單字庫工具列：選庫／新增／刪除／匯入／匯出
+  const names=libNames();
+  html+='<div class="lib-toolbar"><div class="lib-pickrow">'
+    +'<select id="libSel">'+names.map(n=>'<option value="'+esc(n)+'"'+(n===curLib?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select>'
+    +'<button class="lib-tbtn" id="libNew" title="新增單字庫">＋ 新增</button>'
+    +'<button class="lib-tbtn" id="libDel" title="刪除目前單字庫">刪除</button>'
+    +'</div><div class="lib-iorow">'
+    +'<button class="lib-tbtn" id="libExpCsv">匯出 CSV</button>'
+    +'<button class="lib-tbtn" id="libExpJson">匯出 JSON</button>'
+    +'<label class="lib-tbtn" for="libImpFile">匯入 CSV／JSON</label>'
+    +'<input type="file" id="libImpFile" accept=".csv,.json,text/csv,application/json" hidden>'
+    +'</div><div class="vmsg" id="libIoMsg"></div></div>';
+
   html+='<div class="lp-stats">'
     +'<div class="lp-stat due"><div class="num">'+c.due+'</div><div class="lab">今天要複習</div></div>'
     +'<div class="lp-stat"><div class="num">'+c.learning+'</div><div class="lab">學習中</div></div>'
@@ -851,6 +989,22 @@ function renderLibPage(){
   root.querySelectorAll("[data-revyes]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revyes").split(":"); reviewYes(p[0],+p[1]); }; });
   root.querySelectorAll("[data-revno]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-revno").split(":"); reviewNo(p[0],+p[1]); }; });
   root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
+  // 單字庫工具列
+  const lsel=root.querySelector("#libSel"); if(lsel) lsel.onchange=()=>{ setCurLib(lsel.value); quizDate=""; lpQuery=""; renderAll(); };
+  const lnew=root.querySelector("#libNew"); if(lnew) lnew.onclick=()=>showNewLibForm(root);
+  const ldel=root.querySelector("#libDel"); if(ldel) ldel.onclick=()=>{ if(confirm('刪除單字庫「'+curLib+'」與其所有單字？此動作無法復原。')) deleteLib(curLib); };
+  const lec=root.querySelector("#libExpCsv"); if(lec) lec.onclick=()=>downloadFile(curLib+".csv", "﻿"+buildCSV(libWords().map(o=>o.word)), "text/csv;charset=utf-8");
+  const lej=root.querySelector("#libExpJson"); if(lej) lej.onclick=()=>downloadFile("toeic-backup.json", buildBackupJSON(), "application/json");
+  const limp=root.querySelector("#libImpFile"); if(limp) limp.onchange=()=>{
+    const f=limp.files&&limp.files[0]; if(!f) return;
+    const isJson=/\.json$/i.test(f.name);
+    f.text().then(t=>{
+      let msg;
+      if(isJson){ const r=applyBackupJSON(t); msg=r.ok?"已從 JSON 還原備份":("匯入失敗："+r.err); }
+      else { const r=applyCSV(t); msg="CSV 匯入「"+curLib+"」：新增 "+r.added+" 字"+(r.dup?("，更新 "+r.dup+" 字"):""); }
+      const m=document.querySelector("#libIoMsg"); if(m) m.textContent=msg;
+    });
+  };
   const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
   const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
@@ -903,7 +1057,7 @@ if(resetBtn){
 
 /* ---------- bridge for the cloud sync layer (sync.js) ---------- */
 window.TOEIC = {
-  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log}; },
+  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}; },
   isLocalEmpty(){
     return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
   },
@@ -913,16 +1067,24 @@ window.TOEIC = {
     done      = (data && data.tasks) ? data.tasks : {};
     vocab     = (data && data.vocab) ? data.vocab : {};
     log       = (data && data.log) ? data.log : {};
+    libs      = (data && Array.isArray(data.libs)) ? data.libs : [];
     migrateVocab(vocab);
+    migrateLibs();
     localStorage.setItem(LS.start, startDate);
     localStorage.setItem(LS.tasks, JSON.stringify(done));
     localStorage.setItem(LS.vocab, JSON.stringify(vocab));
     localStorage.setItem(LS.log, JSON.stringify(log));
+    localStorage.setItem(LS.libs, JSON.stringify(libs));
     if(startInput) startInput.value = startDate;
     const td = todayDay();
     viewing = (td && td!==0 && td!==99) ? td : (viewing || 1);
     renderAll();
-  }
+  },
+  // 匯入/匯出（也供 UI 與測試使用）
+  exportJSON(){ return buildBackupJSON(); },
+  importJSON(text){ return applyBackupJSON(text); },
+  exportCSV(){ return buildCSV(libWords().map(o=>o.word)); },
+  importCSV(text){ return applyCSV(text); }
 };
 
 // 初始：依目前頁面實際存在的容器渲染（缺的容器自動略過）
