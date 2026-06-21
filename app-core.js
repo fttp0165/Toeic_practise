@@ -462,14 +462,17 @@ function renderDay(){
 
   // recall section（可收摺；summary 顯示今天到期批次數，預設收起）
   const rb=recallBatches(d);
-  html+='<details class="recall-sec"'+(rb.length?'':' open')+'>'
+  html+='<details class="fold-sec"'+(rb.length?'':' open')+'>'
     +'<summary class="sec-head"><span class="dot amber"></span>間隔複習（海馬迴）'
     +(rb.length?'<span class="sec-count">'+rb.length+' 批到期</span>':'')
     +'<span class="chev">▾</span></summary>'
     +recallHTML(d)+'</details>';
 
-  // tasks
-  html+='<div class="section"><div class="sec-head"><span class="dot ink"></span>今日任務 · 完成 '+st.done+'/'+st.total+'</div>';
+  // tasks（可收摺；summary 顯示完成進度，未全部完成時預設展開）
+  html+='<details class="fold-sec"'+(st.done>=st.total?'':' open')+'>'
+    +'<summary class="sec-head"><span class="dot ink"></span>今日任務'
+    +'<span class="sec-count">完成 '+st.done+'/'+st.total+'</span>'
+    +'<span class="chev">▾</span></summary>';
   list.forEach(t=>{
     const k=key(d,t.id);
     const ck=!!done[k];
@@ -483,7 +486,7 @@ function renderDay(){
   if(d>1 && d<19){
     html+='<div class="busy">⏱ 只有 1 小時？保留<b>單字＋聽力＋文法</b>三項核心、量打八折（文法 10 題、聽力 15 題、新字仍 15），砍掉其餘。間隔複習絕不能斷。</div>';
   }
-  html+='</div>'; // close tasks section
+  html+='</details>'; // close tasks section
 
   // vocab entry (only for new-word days)
   if(d<=LAST_NEW){
