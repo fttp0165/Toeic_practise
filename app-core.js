@@ -981,13 +981,14 @@ function renderLibPage(){
     +'<div class="lp-stat done"><div class="num">'+c.done+'</div><div class="lab">已熟記</div></div>'
     +'<div class="lp-stat"><div class="num">'+all.length+'</div><div class="lab">單字總數</div></div></div>';
 
-  html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3>';
+  html+='<details class="lp-sec lp-fold"'+(due.length?'':' open')+'>'
+    +'<summary><h3><span class="dot" style="background:var(--due)"></span>今天要複習 · '+due.length+' 字</h3><span class="chev">▾</span></summary>';
   if(due.length){
     html+='<div class="lib-cardnote">先回想中文，點開驗證，再選「記得／忘了」。</div><div class="lib-cards">';
     due.forEach(o=>{ html+=libReviewCardHTML(o.day, o.idx, o.word); });
     html+='</div>';
   } else { html+='<div class="lp-empty">今天沒有到期的字 🎉 想多背就到下方「今天新學」加字。</div>'; }
-  html+='</div>';
+  html+='</details>';
 
   // 測驗（可選學習日期）
   const qdates=learnDates();

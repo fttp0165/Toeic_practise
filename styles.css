@@ -234,6 +234,12 @@
   .lp-sec{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-top:14px;padding:18px 20px;}
   .lp-sec h3{font-size:13px;font-weight:800;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
   .lp-sec h3 .dot{width:8px;height:8px;border-radius:50%;}
+  /* 可收摺的單字庫區塊（如「今天要複習」）：summary 當作 h3 標題列 */
+  .lp-fold > summary{padding:0;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;}
+  .lp-fold[open] > summary{margin-bottom:12px;}
+  .lp-fold > summary h3{margin:0;}
+  .lp-fold > summary .chev{margin-left:8px;color:var(--faint);transition:.2s;}
+  .lp-fold[open] > summary .chev{transform:rotate(180deg);}
 
   /* library toolbar (multi-library + import/export) */
   .lib-toolbar{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);margin-top:14px;padding:12px 14px;display:flex;flex-direction:column;gap:9px;}
