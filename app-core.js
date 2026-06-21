@@ -460,8 +460,13 @@ function renderDay(){
     +'<div class="phase-desc">'+ph.desc+(isToday?' · <b style="color:#1E2529">今天</b>':'')+'</div></div>'
     +'</div>'+waveHTML(d)+'</div>';
 
-  // recall section
-  html+='<div class="section"><div class="sec-head"><span class="dot amber"></span>間隔複習（海馬迴）</div>'+recallHTML(d)+'</div>';
+  // recall section（可收摺；summary 顯示今天到期批次數，預設收起）
+  const rb=recallBatches(d);
+  html+='<details class="recall-sec"'+(rb.length?'':' open')+'>'
+    +'<summary class="sec-head"><span class="dot amber"></span>間隔複習（海馬迴）'
+    +(rb.length?'<span class="sec-count">'+rb.length+' 批到期</span>':'')
+    +'<span class="chev">▾</span></summary>'
+    +recallHTML(d)+'</details>';
 
   // tasks
   html+='<div class="section"><div class="sec-head"><span class="dot ink"></span>今日任務 · 完成 '+st.done+'/'+st.total+'</div>';
