@@ -277,10 +277,22 @@ function saveWordEdit(form){
   editing=null;
   saveVocab(); renderAll();
 }
+// 按下編輯後，把出現的編輯表單捲動到畫面中央，並聚焦第一個欄位
+function scrollToEditForm(k){
+  if(!k) return;
+  // renderAll 為同步，DOM 已更新；用 rAF 確保版面計算完成後再捲動
+  requestAnimationFrame(()=>{
+    const form=document.querySelector('.wedit[data-k="'+k+'"]');
+    if(!form) return;
+    form.scrollIntoView({behavior:"smooth", block:"center"});
+    const first=form.querySelector(".we-w");
+    if(first) first.focus({preventScroll:true});
+  });
+}
 // 將編輯/刪除/翻卡的事件綁到指定容器
 function wireWordControls(root){
   root.querySelectorAll("[data-edit]").forEach(el=>{
-    el.onclick=e=>{ e.stopPropagation(); editing=el.getAttribute("data-edit"); renderAll(); };
+    el.onclick=e=>{ e.stopPropagation(); editing=el.getAttribute("data-edit"); renderAll(); scrollToEditForm(editing); };
   });
   root.querySelectorAll("[data-del]").forEach(el=>{
     el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-del").split(":"); deleteWord(p[0],+p[1]); };
