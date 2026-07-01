@@ -181,7 +181,45 @@ projects = [
 
 ---
 
-## 9. 待決事項（開工前請確認）
+## 9. CI/CD（完整版）
+
+現況：無任何 CI/CD，僅靠 GitHub Pages「Deploy from a branch」在 push 到 `main` 時自動發佈。專案為**純靜態、無建置、無框架**，因此走「輕量但完整」的三層方案，全部用 GitHub Actions、零額外服務、零費用。
+
+### 9.1 CI — 語法檢查（每次 PR / push）
+
+- Workflow：`.github/workflows/ci.yml`，觸發於 `pull_request` 與 push 到 `main` / 開發分支。
+- 步驟：
+  - `node --check` 逐一驗 `app-core.js` / `sync.js` / `srs.js` JS 語法。
+  - HTML 基本驗證（`index.html` / `library.html` / `dashboard.html`），可用輕量 linter 或簡單存在性/標籤檢查，不引入重依賴。
+- 目的：語法錯、明顯破壞**進不了 `main`**，避免壞版直接上線 Pages。
+
+### 9.2 CI — 單元測試（守住間隔複習正確性）
+
+- 先把純函式 `phaseOf` / `tasksOf` / `recallBatches` / `lastNewDay` 抽成 **`srs.js`**（無 DOM、可被 Node 直接 import；`app-core.js` 改為引用它）。
+- 用 Node 內建 `node:test` + `node --test` 寫測試（**零 npm 依賴**），涵蓋：
+  - **20 天回歸基準**：對 `days=20` 逐日比對階段名稱、任務清單、到期批次，須與改造前完全一致（把任務 #10 的人工驗證變成自動守門）。
+  - **縮放正確性**：`days=12 / 30 / 7` 時階段邊界、`lastNewDay`、批次過濾符合 §4.3 規格。
+  - **邊界退化**：`days≤4` 的下限規則（每段≥1、收尾≥2）。
+- 這一步同時完成 `PROJECT_PLAN.md §8` 早就埋的「把 SRS 純函式獨立成 `srs.js`」。
+
+### 9.3 CD — GitHub Actions 部署 Pages
+
+- 把 Pages 從「Deploy from a branch」改為 **Actions 部署**：`.github/workflows/deploy.yml` 用 `actions/configure-pages` + `actions/upload-pages-artifact` + `actions/deploy-pages`。
+- 觸發：push 到 `main` 且 **CI 通過後**才部署（`needs: ci`，或用 workflow gating）。
+- 好處：部署與檢查串成一條 pipeline——**測試綠燈才發佈**，且部署歷程可追蹤、可回滾。純靜態上傳整個 repo root 當 artifact，無建置步驟。
+- Pages 設定：Repo → Settings → Pages → Source 改為 **GitHub Actions**（一次性設定）。
+
+### 9.4 分工與里程碑對應
+
+- `srs.js` 抽離（9.2 前置）安排在 **M1 的階段/任務改寫（任務 #3）之後**最自然，趁函式簽章剛改完一起抽。
+- CI/測試、CD 可在 M1 骨架就緒後隨時導入，不阻塞功能開發。
+- 對應新增任務 **#12 抽 srs.js、#13 CI 語法檢查＋單元測試、#14 Actions 部署 Pages**。
+
+> 原則不變：CI/CD 不得引入建置步驟或框架相依，維持「可直接用瀏覽器開啟」；所有 workflow 僅用 Node 內建能力與官方 Pages actions。
+
+---
+
+## 10. 待決事項（開工前請確認）
 
 1. **考試日 vs 倒數天數**：以「選考試日期」為主要輸入（建議），還是「直接輸入 N 天」為主？兩者都做時哪個當預設？
 2. ~~**單字池歸屬**~~ ✅ **已定案**：單字池跨專案共用、**持續累積、永不清空**（見 §4.6）。
@@ -191,4 +229,4 @@ projects = [
 
 ---
 
-*規劃書 v1 · 對應改造目標：把 `index.html` 的固定 20 天衝刺改為可開啟、可設定考試日的衝刺專案。實作前請先敲定 §9。*
+*規劃書 v2 · 對應改造目標：把 `index.html` 的固定 20 天衝刺改為可開啟、可設定考試日的衝刺專案，並加入完整 CI/CD（§9）。實作前請先敲定 §10。*
