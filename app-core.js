@@ -152,6 +152,19 @@ function curLastNew(){
   return (n>=3)? n-2 : Math.max(1, n-1);   // 收尾段不背新字；極短計畫退化為 n-1、至少 1
 }
 
+// 一次性遷移（計劃書 §6）：舊的單一 start + tasks → 預設專案。
+// 舊 key（toeic20_start / toeic20_tasks）保留讀取相容、不即刻刪除；vocab／libs／pr 一律不動。
+// 直接寫 localStorage、不呼叫 notifyChange：載入期 sync 尚未接上，且此時 onChange 仍在 TDZ。
+function migrateProjects(){
+  if(projects.length) return;                              // 已有專案 → 不需遷移
+  if(!startDate && Object.keys(done).length===0) return;   // 全新使用者 → 留待建立第一個專案
+  const p={ id:genProjId(), name:"我的衝刺", start:startDate||"", exam:"", days:TOTAL, tasks:done };
+  projects.push(p); curProj=p.id;
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
+}
+migrateProjects();
+
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
 function migrateVocab(v){
