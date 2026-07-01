@@ -1,61 +1,15 @@
 "use strict";
-const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
-const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs"};
+const TOTAL=20, WPB=SRS.WPB, INTERVALS=SRS.INTERVALS;   // 純函式與常數集中在 srs.js（見下方 wrappers）
+const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs", projects:"toeic20_projects", curproj:"toeic20_curproj"};
 const LIB_DEFAULT="我的單字庫";
 
-/* ---------- phases ---------- */
-function phaseOf(d){
-  if(d<=3)  return {name:"打地基",     desc:"模擬考抓底、熟記題型配分、開始滾單字"};
-  if(d<=9)  return {name:"聽力＋文法主攻",desc:"CP 值最高，建立基礎聽力與文法直覺"};
-  if(d<=14) return {name:"擴張 Part 3/4/6",desc:"先看題目再聽，抓關鍵資訊"};
-  if(d<=18) return {name:"攻 Part 7＋時間",desc:"關鍵字定位、控制每篇時間"};
-  return            {name:"全真模擬＋收尾",desc:"計時實戰、調節奏、複習錯題"};
-}
-
-/* ---------- daily tasks ---------- */
-function tasksOf(d){
-  const t=[];
-  // morning recall (auto handled separately as recall box, but also a checkable task)
-  t.push({id:"recall",title:"晨間主動回想複習",note:"蓋住中文，回想下方各批單字",time:"15 分"});
-
-  if(d===1){
-    t.push({id:"mock0",title:"完整模擬考 1 回（抓底）",note:"分數難看沒關係，目的是看清各 Part 弱點",time:"~2 hr"});
-    t.push({id:"types",title:"熟記 7 大 Part 題型／題數／配分",note:"低分者最常跳過、但回報最大的一步",time:"30 分"});
-  } else if(d<=3){
-    t.push({id:"lis",title:"聽力 Part 1–2：20 題 + shadowing 5 句",note:"題型固定，先把套路與陷阱摸熟",time:"25 分"});
-    t.push({id:"gram",title:"Part 5 文法 10 題 + 訂正",note:"錯題歸類：詞性／時態／介系詞／連接詞",time:"25 分"});
-    t.push({id:"focus",title:"複習題型配分 + 加練 Part 1–2 約 10 題",note:"把地基踩穩",time:"25 分"});
-  } else if(d<=9){
-    t.push({id:"lis",title:"聽力 Part 1–2：25–30 題 + shadowing 8 句",note:"今天的主攻項，跟著音檔開口唸",time:"25 分"});
-    t.push({id:"gram",title:"Part 5 文法 15 題 + 歸類訂正",note:"看到題目就知道在考哪個點",time:"25 分"});
-    t.push({id:"focus",title:"加練 Part 1–2 約 15 題 + shadowing",note:"把「聽得懂的比例」拉上來",time:"25 分"});
-  } else if(d<=14){
-    t.push({id:"lis",title:"Part 3／4：3–4 篇（約 10–12 題）",note:"先看題再聽，開聽前掃過問題抓重點",time:"30 分"});
-    t.push({id:"gram",title:"Part 5／6 文法 10–15 題 + 訂正",note:"Part 6 併進文法一起練",time:"25 分"});
-    t.push({id:"focus",title:"聽力 Part 1–2：10 題維持手感",note:"別讓最穩的兩個 Part 生疏",time:"20 分"});
-  } else if(d<=18){
-    t.push({id:"read",title:"Part 7 單篇：2–3 篇（計時）",note:"關鍵字定位、不逐字讀，先寫單篇文章題",time:"30 分"});
-    t.push({id:"lis",title:"Part 3／4：2 篇實戰",note:"先看題、抓關鍵，維持聽力手感",time:"25 分"});
-    t.push({id:"gram",title:"Part 5／6 文法 10 題 + 訂正",note:"維持文法穩定分",time:"20 分"});
-  } else {
-    t.push({id:"mockF",title:"全真計時模擬 1 回（聽力＋閱讀）",note:"嚴格計時，把答題節奏調到位",time:"~2 hr"});
-    t.push({id:"review",title:"複習錯題本 + 單字本",note:"收尾，把會的穩穩拿下",time:"30 分"});
-  }
-
-  // 睡前新單字（Day 1–18），列為可打勾任務
-  if(d<=LAST_NEW){
-    t.push({id:"newvocab",title:"睡前背新單字 "+WPB+" 個（第 "+d+" 批）",note:"當天最後一件事，明早起床先回想",time:"15 分"});
-  }
-  return t;
-}
-
-/* ---------- spaced repetition ---------- */
-function recallBatches(d){
-  return INTERVALS
-    .map(iv=>({src:d-iv, iv}))
-    .filter(o=>o.src>=1 && o.src<=LAST_NEW)
-    .sort((a,b)=>a.src-b.src);
-}
+/* ---------- 間隔複習 / 階段：純函式在 srs.js，這裡只做「預設 days=目前專案天數」的薄包裝 ----------
+   srs.js 必須在 app-core.js 之前載入（各 HTML 已如此排序）。 */
+function phaseBounds(days){ return SRS.phaseBounds(days); }
+function lastNewOf(days){ return SRS.lastNewOf(days); }
+function phaseOf(d, days){ return SRS.phaseOf(d, days || curDays()); }
+function tasksOf(d, days){ return SRS.tasksOf(d, days || curDays()); }
+function recallBatches(d, days){ return SRS.recallBatches(d, days || curDays()); }
 
 /* ---------- state ---------- */
 let startDate = localStorage.getItem(LS.start) || "";
@@ -81,6 +35,91 @@ let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
 let quiz = null;        // 測驗中的 session（null = 未測驗）
 let quizDate = "";      // 測驗選的學習日期（""＝預設今天/最近）
+
+/* ---------- 衝刺專案（可設定考試日/倒數天數，可切換） ---------- */
+// localStorage: toeic20_projects = [{id,name,start,exam,days,tasks}]、toeic20_curproj = 目前專案 id
+// 註：本區僅建立資料模型與 CRUD（計劃書任務 #1）。渲染接線於 #4、舊資料遷移於 #2。
+let projects = [];
+try{ projects = JSON.parse(localStorage.getItem(LS.projects)||"[]"); }catch(e){ projects=[]; }
+if(!Array.isArray(projects)) projects=[];
+let curProj = localStorage.getItem(LS.curproj) || "";
+
+function saveProjects(){
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
+  notifyChange();
+}
+function genProjId(){ return "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+// 由開始日與考試日推算總天數（含頭尾）；缺考試日則回退 fallback，再退回 TOTAL
+function computeDays(start, exam, fallback){
+  if(start && exam){
+    const s=new Date(start+"T00:00:00"), e=new Date(exam+"T00:00:00");
+    const d=Math.floor((e-s)/86400000)+1;
+    if(d>=1) return d;
+  }
+  return (fallback>=1)? fallback : TOTAL;
+}
+
+function getCurProject(){
+  if(!projects.length) return null;
+  let p=projects.find(x=>x.id===curProj);
+  if(!p){ p=projects[0]; curProj=p.id; }   // 目前 id 失效時回退第一個
+  return p;
+}
+function setCurProject(id){
+  if(projects.some(x=>x.id===id)){ curProj=id; localStorage.setItem(LS.curproj, curProj); }
+}
+function createProject(name, start, exam, days){
+  const st=start||"", ex=exam||"";
+  const p={ id:genProjId(),
+            name:(name||"新的衝刺").trim()||"新的衝刺",
+            start:st, exam:ex, days:computeDays(st, ex, days), tasks:{} };
+  projects.push(p); curProj=p.id; saveProjects();
+  return p;
+}
+function renameProject(id, name){
+  const p=projects.find(x=>x.id===id); if(!p) return;
+  p.name=(name||"").trim()||p.name; saveProjects();
+}
+function updateProject(id, patch){
+  const p=projects.find(x=>x.id===id); if(!p || !patch) return;
+  if("start" in patch) p.start=patch.start||"";
+  if("exam" in patch)  p.exam=patch.exam||"";
+  if("name" in patch)  p.name=(patch.name||"").trim()||p.name;
+  if("days" in patch && patch.days>=1) p.days=patch.days;
+  if(p.start && p.exam) p.days=computeDays(p.start, p.exam, p.days); // 有起訖日則以考試日重算
+  saveProjects();
+}
+// 刪除專案：只移除該專案設定與任務打勾，絕不動 vocab／學習進度（計劃書 §4.6、§8）
+function deleteProject(id){
+  const i=projects.findIndex(x=>x.id===id); if(i<0) return;
+  projects.splice(i,1);
+  if(curProj===id) curProj = projects.length? projects[0].id : "";
+  saveProjects();
+}
+
+// 目前專案衍生值；無專案時回退舊常數，維持現有行為（渲染改接於任務 #4）
+function curDays(){ const p=getCurProject(); return (p && p.days>=1)? p.days : TOTAL; }
+function curLastNew(){ return lastNewOf(curDays()); }   // 收尾段不背新字；退化規則見 lastNewOf
+function curStart(){ const p=getCurProject(); return p ? p.start : startDate; } // 目前專案開始日，無專案時回退舊全域值
+
+// 一次性遷移（計劃書 §6）：舊的單一 start + tasks → 預設專案。
+// 舊 key（toeic20_start / toeic20_tasks）保留讀取相容、不即刻刪除；vocab／libs／pr 一律不動。
+// 直接寫 localStorage、不呼叫 notifyChange：載入期 sync 尚未接上，且此時 onChange 仍在 TDZ。
+function migrateProjects(){
+  if(projects.length) return;                              // 已有專案 → 不需遷移
+  if(!startDate && Object.keys(done).length===0) return;   // 全新使用者 → 留待建立第一個專案
+  const p={ id:genProjId(), name:"我的衝刺", start:startDate||"", exam:"", days:TOTAL, tasks:done };
+  projects.push(p); curProj=p.id;
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
+}
+migrateProjects();
+
+// 任務改為以「目前專案」為準（計劃書 §4.1）：把 done 綁定成目前專案的 tasks 物件，
+// 讓打勾寫入直接落在專案上；save() 會一併持久化 projects。無專案時 done 維持舊全域值。
+(function bindDoneToProject(){ const p=getCurProject(); if(p) done=p.tasks; })();
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
@@ -310,7 +349,12 @@ function wireWordControls(root){
 let onChange = null;
 function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}); }
 
-function save(){ localStorage.setItem(LS.tasks, JSON.stringify(done)); notifyChange(); }
+function save(){
+  localStorage.setItem(LS.tasks, JSON.stringify(done));   // 舊 key 相容
+  const p=getCurProject();
+  if(p){ localStorage.setItem(LS.projects, JSON.stringify(projects)); localStorage.setItem(LS.curproj, curProj); } // done===p.tasks，一併持久化專案
+  notifyChange();
+}
 function saveVocab(){ localStorage.setItem(LS.vocab, JSON.stringify(vocab)); notifyChange(); }
 function saveLog(){ localStorage.setItem(LS.log, JSON.stringify(log)); notifyChange(); }
 // 正規化一天的紀錄（相容舊的數字格式）→ {c:對, x:錯, n:總}
@@ -347,12 +391,13 @@ function practiceRecords(){
 function key(d,id){ return "d"+d+":"+id; }
 
 function todayDay(){
-  if(!startDate) return null;
-  const s=new Date(startDate+"T00:00:00");
+  const st=curStart();
+  if(!st) return null;
+  const s=new Date(st+"T00:00:00");
   const now=new Date(); now.setHours(0,0,0,0);
   const diff=Math.floor((now-s)/86400000)+1;
-  if(diff<1) return 0;        // not started
-  if(diff>TOTAL) return 99;   // finished
+  if(diff<1) return 0;           // not started
+  if(diff>curDays()) return 99;  // finished
   return diff;
 }
 
@@ -370,7 +415,7 @@ function renderStrip(){
   const strip=$("#strip"); if(!strip) return;   // 僅衝刺頁
   const td=todayDay();
   strip.innerHTML="";
-  for(let d=1;d<=TOTAL;d++){
+  for(let d=1;d<=curDays();d++){
     const st=dayStats(d);
     const pip=document.createElement("div");
     pip.className="pip";
@@ -432,7 +477,7 @@ function recallHTML(d){
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 function nightHTML(d){
-  if(d>LAST_NEW) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字，別熬夜。</div>';
+  if(d>curLastNew()) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字，別熬夜。</div>';
   return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>記憶在睡眠中歸檔：新單字排最後、明早起床先回想，衝刺期別熬夜。</div>';
 }
 
@@ -455,7 +500,7 @@ function renderDay(){
 
   let html='<div class="card">';
   html+='<div class="card-top"><div class="daynum-row">'
-    +'<div class="daynum">'+d+'<span class="of"> / 20</span></div>'
+    +'<div class="daynum">'+d+'<span class="of"> / '+curDays()+'</span></div>'
     +'<div class="day-meta"><span class="phase-badge">'+ph.name+'</span>'
     +'<div class="phase-desc">'+ph.desc+(isToday?' · <b style="color:#1E2529">今天</b>':'')+'</div></div>'
     +'</div>'+waveHTML(d)+'</div>';
@@ -489,7 +534,7 @@ function renderDay(){
   html+='</details>'; // close tasks section
 
   // vocab entry (only for new-word days)
-  if(d<=LAST_NEW){
+  if(d<=curLastNew()){
     const words = vocab[d] || [];
     html+='<div class="section"><div class="sec-head"><span class="dot green"></span>第 '+d+' 批單字 · 已輸入 '+words.length+'/'+WPB+'</div>';
     html+='<div class="ventry">'
@@ -632,7 +677,7 @@ function renderLibrary(){
 function renderProgress(){
   if(!$("#progPct")) return;   // 僅衝刺頁
   let total=0, dn=0;
-  for(let d=1;d<=TOTAL;d++){ const s=dayStats(d); total+=s.total; dn+=s.done; }
+  for(let d=1;d<=curDays();d++){ const s=dayStats(d); total+=s.total; dn+=s.done; }
   const pct= total? Math.round(dn/total*100):0;
   $("#progPct").textContent=pct+"%";
   $("#progCount").textContent="完成 "+dn+" / "+total+" 項";
@@ -641,7 +686,7 @@ function renderProgress(){
   const td=todayDay();
   let streak=0;
   if(td && td!==0){
-    const upto = (td===99)?TOTAL:td;
+    const upto = (td===99)?curDays():td;
     for(let d=upto; d>=1; d--){
       const s=dayStats(d);
       if(s.total && s.done===s.total) streak++; else break;
@@ -650,7 +695,7 @@ function renderProgress(){
   $("#streakLab").textContent="連續完成 "+streak+" 天";
 
   const grid=$("#grid"); grid.innerHTML="";
-  for(let d=1;d<=TOTAL;d++){
+  for(let d=1;d<=curDays();d++){
     const s=dayStats(d);
     const c=document.createElement("div");
     c.className="cell";
@@ -1139,28 +1184,72 @@ function renderDashboard(){
   root.innerHTML=html;
 }
 
-function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
+/* ---------- 專案列（考試日 / 倒數） ---------- */
+function countdownHTML(p){
+  if(!p || !p.start) return '<span class="cd-muted">設定開始日與考試日，開始倒數</span>';
+  if(!p.exam){
+    const td=todayDay();
+    if(td===0)  return '<span class="cd-muted">尚未開始（Day 1 = '+esc(p.start)+'）</span>';
+    if(td===99) return '<span class="cd-done">衝刺已完成 🎉</span>';
+    return '<span class="cd-muted">第 '+td+' / '+curDays()+' 天</span>';
+  }
+  const now=new Date(); now.setHours(0,0,0,0);
+  const e=new Date(p.exam+"T00:00:00");
+  const diff=Math.round((e-now)/86400000);
+  if(diff>0)   return '距離考試還有 <b>'+diff+'</b> 天';
+  if(diff===0) return '<b>今天就是考試日！</b>加油 💪';
+  return '<span class="cd-muted">考試已於 '+Math.abs(diff)+' 天前結束</span>';
+}
+function renderProjectBar(){
+  const bar=$("#projectBar"); if(!bar) return;   // 僅衝刺頁
+  const p=getCurProject();
+  const nameEl=$("#projName"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
+  if(nameEl) nameEl.textContent = p ? p.name : "尚未建立專案";
+  if(si) si.value = p ? (p.start||"") : (startDate||"");
+  if(ei) ei.value = p ? (p.exam||"") : "";
+  if(cd) cd.innerHTML = countdownHTML(p);
+}
+
+function renderAll(){ renderProjectBar(); renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");          // 只有 20 天衝刺頁(index.html)有這些元件
 if(startInput){
-  if(startDate) startInput.value=startDate;
+  if(curStart()) startInput.value=curStart();
   startInput.onchange=()=>{
-    startDate=startInput.value;
-    localStorage.setItem(LS.start,startDate);
-    notifyChange();
+    const v=startInput.value;
+    startDate=v; localStorage.setItem(LS.start,v);   // 舊 key 相容
+    const p=getCurProject();
+    if(p) updateProject(p.id,{start:v});             // 同步目前專案（內含 notifyChange）
+    else { const np=createProject("我的衝刺", v, ($("#exam")&&$("#exam").value)||""); done=np.tasks; } // 首次設定 → 建立專案
     const td=todayDay();
     viewing = (td && td!==0 && td!==99)? td : 1;
+    renderAll();
+  };
+}
+const examInput=$("#exam");
+if(examInput){
+  examInput.onchange=()=>{
+    const v=examInput.value;
+    let p=getCurProject();
+    if(p) updateProject(p.id,{exam:v});              // 更新考試日 → 內部重算天數
+    else { p=createProject("我的衝刺", ($("#start")&&$("#start").value)||"", v); done=p.tasks; }
+    const td=todayDay();
+    viewing = (td && td!==0 && td!==99)? td : (viewing||1);
     renderAll();
   };
 }
 const resetBtn=$("#resetBtn");
 if(resetBtn){
   resetBtn.onclick=()=>{
-    if(confirm("確定清除所有打勾進度與開始日？此動作無法復原。")){
-      localStorage.removeItem(LS.tasks);
-      localStorage.removeItem(LS.start);
-      done={}; startDate=""; if(startInput) startInput.value=""; viewing=1;
+    // 只清目前專案的打勾與日期，單字與學習進度一律保留（計劃書 §4.6、§8）
+    if(confirm("確定清除目前專案的打勾進度與開始日？單字不會被刪除。此動作無法復原。")){
+      const p=getCurProject();
+      if(p){ p.start=""; p.exam=""; p.days=TOTAL; p.tasks={}; done=p.tasks; saveProjects(); }
+      else { done={}; }
+      localStorage.setItem(LS.tasks, JSON.stringify(done));
+      startDate=""; localStorage.setItem(LS.start,"");
+      if(startInput) startInput.value=""; viewing=1;
       notifyChange();
       renderAll();
     }
