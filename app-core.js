@@ -1,5 +1,5 @@
 "use strict";
-const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
+const TOTAL=20, WPB=15, INTERVALS=[1,3,7,14];   // 最後背新字日改由 lastNewOf(days) 依天數推算
 const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs", projects:"toeic20_projects", curproj:"toeic20_curproj"};
 const LIB_DEFAULT="我的單字庫";
 
@@ -72,10 +72,13 @@ function tasksOf(d, days){
 }
 
 /* ---------- spaced repetition ---------- */
-function recallBatches(d){
+// 到期回想批次：來源天 src = d - iv，須落在 1..lastNewDay（收尾段不背新字、不列入來源）。
+// days 預設目前專案天數；days=20 時 lastNew=18，與改造前一致。短計畫 +14 自然不命中。
+function recallBatches(d, days){
+  const lastNew = lastNewOf(days || curDays());
   return INTERVALS
     .map(iv=>({src:d-iv, iv}))
-    .filter(o=>o.src>=1 && o.src<=LAST_NEW)
+    .filter(o=>o.src>=1 && o.src<=lastNew)
     .sort((a,b)=>a.src-b.src);
 }
 
