@@ -1,6 +1,6 @@
 "use strict";
 const TOTAL=20, LAST_NEW=18, WPB=15, INTERVALS=[1,3,7,14];
-const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs"};
+const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", log:"toeic20_log", libs:"toeic20_libs", projects:"toeic20_projects", curproj:"toeic20_curproj"};
 const LIB_DEFAULT="我的單字庫";
 
 /* ---------- phases ---------- */
@@ -81,6 +81,76 @@ let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
 let quiz = null;        // 測驗中的 session（null = 未測驗）
 let quizDate = "";      // 測驗選的學習日期（""＝預設今天/最近）
+
+/* ---------- 衝刺專案（可設定考試日/倒數天數，可切換） ---------- */
+// localStorage: toeic20_projects = [{id,name,start,exam,days,tasks}]、toeic20_curproj = 目前專案 id
+// 註：本區僅建立資料模型與 CRUD（計劃書任務 #1）。渲染接線於 #4、舊資料遷移於 #2。
+let projects = [];
+try{ projects = JSON.parse(localStorage.getItem(LS.projects)||"[]"); }catch(e){ projects=[]; }
+if(!Array.isArray(projects)) projects=[];
+let curProj = localStorage.getItem(LS.curproj) || "";
+
+function saveProjects(){
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
+  notifyChange();
+}
+function genProjId(){ return "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+// 由開始日與考試日推算總天數（含頭尾）；缺考試日則回退 fallback，再退回 TOTAL
+function computeDays(start, exam, fallback){
+  if(start && exam){
+    const s=new Date(start+"T00:00:00"), e=new Date(exam+"T00:00:00");
+    const d=Math.floor((e-s)/86400000)+1;
+    if(d>=1) return d;
+  }
+  return (fallback>=1)? fallback : TOTAL;
+}
+
+function getCurProject(){
+  if(!projects.length) return null;
+  let p=projects.find(x=>x.id===curProj);
+  if(!p){ p=projects[0]; curProj=p.id; }   // 目前 id 失效時回退第一個
+  return p;
+}
+function setCurProject(id){
+  if(projects.some(x=>x.id===id)){ curProj=id; localStorage.setItem(LS.curproj, curProj); }
+}
+function createProject(name, start, exam, days){
+  const st=start||"", ex=exam||"";
+  const p={ id:genProjId(),
+            name:(name||"新的衝刺").trim()||"新的衝刺",
+            start:st, exam:ex, days:computeDays(st, ex, days), tasks:{} };
+  projects.push(p); curProj=p.id; saveProjects();
+  return p;
+}
+function renameProject(id, name){
+  const p=projects.find(x=>x.id===id); if(!p) return;
+  p.name=(name||"").trim()||p.name; saveProjects();
+}
+function updateProject(id, patch){
+  const p=projects.find(x=>x.id===id); if(!p || !patch) return;
+  if("start" in patch) p.start=patch.start||"";
+  if("exam" in patch)  p.exam=patch.exam||"";
+  if("name" in patch)  p.name=(patch.name||"").trim()||p.name;
+  if("days" in patch && patch.days>=1) p.days=patch.days;
+  if(p.start && p.exam) p.days=computeDays(p.start, p.exam, p.days); // 有起訖日則以考試日重算
+  saveProjects();
+}
+// 刪除專案：只移除該專案設定與任務打勾，絕不動 vocab／學習進度（計劃書 §4.6、§8）
+function deleteProject(id){
+  const i=projects.findIndex(x=>x.id===id); if(i<0) return;
+  projects.splice(i,1);
+  if(curProj===id) curProj = projects.length? projects[0].id : "";
+  saveProjects();
+}
+
+// 目前專案衍生值；無專案時回退舊常數，維持現有行為（渲染改接於任務 #4）
+function curDays(){ const p=getCurProject(); return (p && p.days>=1)? p.days : TOTAL; }
+function curLastNew(){
+  const n=curDays();
+  return (n>=3)? n-2 : Math.max(1, n-1);   // 收尾段不背新字；極短計畫退化為 n-1、至少 1
+}
 
 /* ---------- vocab library: migration + lookup ---------- */
 // 舊資料 ex(字串) → exs(陣列)；保證每個字都有 exs
