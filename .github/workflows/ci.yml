@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: 語法檢查 + 單元測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: JS 語法檢查（node --check）
+        run: |
+          for f in srs.js app-core.js sync.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+      - name: 單元測試（node:test，零依賴）
+        run: node --test tests/*.test.js
