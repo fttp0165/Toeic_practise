@@ -4,16 +4,38 @@ const LS={start:"toeic20_start", tasks:"toeic20_tasks", vocab:"toeic20_vocab", l
 const LIB_DEFAULT="我的單字庫";
 
 /* ---------- phases ---------- */
-function phaseOf(d){
-  if(d<=3)  return {name:"打地基",     desc:"模擬考抓底、熟記題型配分、開始滾單字"};
-  if(d<=9)  return {name:"聽力＋文法主攻",desc:"CP 值最高，建立基礎聽力與文法直覺"};
-  if(d<=14) return {name:"擴張 Part 3/4/6",desc:"先看題目再聽，抓關鍵資訊"};
-  if(d<=18) return {name:"攻 Part 7＋時間",desc:"關鍵字定位、控制每篇時間"};
+// 五階段邊界依總天數自動縮放（比例 15/30/25/20/10%）。收尾段固定佔最後 2 天
+// （days<=3 退化）；其餘 4 段按比例分配收尾前的 study span。
+// days=20 時回傳 [3,9,14,18]，與改造前 d<=3/9/14/18 完全一致。
+function phaseBounds(days){
+  const S=Math.max(1, days-2);      // study span（收尾前的天數）
+  const cum=[15,45,70,90];          // phases 1..4 的累積比例（分母 90）
+  const ends=[]; let prev=0;
+  for(let i=0;i<4;i++){
+    let e=Math.round(cum[i]/90*S);
+    if(e<prev+1) e=prev+1;          // 每段至少 1 天、單調遞增
+    if(e>S) e=S;                    // 不超過 study span
+    ends.push(e); prev=e;
+  }
+  return ends;
+}
+// 最後背新字日 = 總天數−2（收尾段不背新字）；極短計畫退化為 days−1、至少 1
+function lastNewOf(days){ return (days>=3)? days-2 : Math.max(1, days-1); }
+
+function phaseOf(d, days){
+  days = days || curDays();
+  const b=phaseBounds(days);
+  if(d<=b[0]) return {name:"打地基",     desc:"模擬考抓底、熟記題型配分、開始滾單字"};
+  if(d<=b[1]) return {name:"聽力＋文法主攻",desc:"CP 值最高，建立基礎聽力與文法直覺"};
+  if(d<=b[2]) return {name:"擴張 Part 3/4/6",desc:"先看題目再聽，抓關鍵資訊"};
+  if(d<=b[3]) return {name:"攻 Part 7＋時間",desc:"關鍵字定位、控制每篇時間"};
   return            {name:"全真模擬＋收尾",desc:"計時實戰、調節奏、複習錯題"};
 }
 
 /* ---------- daily tasks ---------- */
-function tasksOf(d){
+function tasksOf(d, days){
+  days = days || curDays();
+  const b=phaseBounds(days);       // 依天數縮放的階段邊界，取代寫死的 d<=3/9/14/18
   const t=[];
   // morning recall (auto handled separately as recall box, but also a checkable task)
   t.push({id:"recall",title:"晨間主動回想複習",note:"蓋住中文，回想下方各批單字",time:"15 分"});
@@ -21,19 +43,19 @@ function tasksOf(d){
   if(d===1){
     t.push({id:"mock0",title:"完整模擬考 1 回（抓底）",note:"分數難看沒關係，目的是看清各 Part 弱點",time:"~2 hr"});
     t.push({id:"types",title:"熟記 7 大 Part 題型／題數／配分",note:"低分者最常跳過、但回報最大的一步",time:"30 分"});
-  } else if(d<=3){
+  } else if(d<=b[0]){
     t.push({id:"lis",title:"聽力 Part 1–2：20 題 + shadowing 5 句",note:"題型固定，先把套路與陷阱摸熟",time:"25 分"});
     t.push({id:"gram",title:"Part 5 文法 10 題 + 訂正",note:"錯題歸類：詞性／時態／介系詞／連接詞",time:"25 分"});
     t.push({id:"focus",title:"複習題型配分 + 加練 Part 1–2 約 10 題",note:"把地基踩穩",time:"25 分"});
-  } else if(d<=9){
+  } else if(d<=b[1]){
     t.push({id:"lis",title:"聽力 Part 1–2：25–30 題 + shadowing 8 句",note:"今天的主攻項，跟著音檔開口唸",time:"25 分"});
     t.push({id:"gram",title:"Part 5 文法 15 題 + 歸類訂正",note:"看到題目就知道在考哪個點",time:"25 分"});
     t.push({id:"focus",title:"加練 Part 1–2 約 15 題 + shadowing",note:"把「聽得懂的比例」拉上來",time:"25 分"});
-  } else if(d<=14){
+  } else if(d<=b[2]){
     t.push({id:"lis",title:"Part 3／4：3–4 篇（約 10–12 題）",note:"先看題再聽，開聽前掃過問題抓重點",time:"30 分"});
     t.push({id:"gram",title:"Part 5／6 文法 10–15 題 + 訂正",note:"Part 6 併進文法一起練",time:"25 分"});
     t.push({id:"focus",title:"聽力 Part 1–2：10 題維持手感",note:"別讓最穩的兩個 Part 生疏",time:"20 分"});
-  } else if(d<=18){
+  } else if(d<=b[3]){
     t.push({id:"read",title:"Part 7 單篇：2–3 篇（計時）",note:"關鍵字定位、不逐字讀，先寫單篇文章題",time:"30 分"});
     t.push({id:"lis",title:"Part 3／4：2 篇實戰",note:"先看題、抓關鍵，維持聽力手感",time:"25 分"});
     t.push({id:"gram",title:"Part 5／6 文法 10 題 + 訂正",note:"維持文法穩定分",time:"20 分"});
@@ -42,8 +64,8 @@ function tasksOf(d){
     t.push({id:"review",title:"複習錯題本 + 單字本",note:"收尾，把會的穩穩拿下",time:"30 分"});
   }
 
-  // 睡前新單字（Day 1–18），列為可打勾任務
-  if(d<=LAST_NEW){
+  // 睡前新單字（Day 1 ~ lastNew），列為可打勾任務
+  if(d<=lastNewOf(days)){
     t.push({id:"newvocab",title:"睡前背新單字 "+WPB+" 個（第 "+d+" 批）",note:"當天最後一件事，明早起床先回想",time:"15 分"});
   }
   return t;
@@ -147,10 +169,7 @@ function deleteProject(id){
 
 // 目前專案衍生值；無專案時回退舊常數，維持現有行為（渲染改接於任務 #4）
 function curDays(){ const p=getCurProject(); return (p && p.days>=1)? p.days : TOTAL; }
-function curLastNew(){
-  const n=curDays();
-  return (n>=3)? n-2 : Math.max(1, n-1);   // 收尾段不背新字；極短計畫退化為 n-1、至少 1
-}
+function curLastNew(){ return lastNewOf(curDays()); }   // 收尾段不背新字；退化規則見 lastNewOf
 
 // 一次性遷移（計劃書 §6）：舊的單一 start + tasks → 預設專案。
 // 舊 key（toeic20_start / toeic20_tasks）保留讀取相容、不即刻刪除；vocab／libs／pr 一律不動。
@@ -515,7 +534,7 @@ function recallHTML(d){
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 function nightHTML(d){
-  if(d>LAST_NEW) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字，別熬夜。</div>';
+  if(d>curLastNew()) return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>衝刺尾聲：不背新字，睡前複習錯題本與弱點單字，別熬夜。</div>';
   return '<div class="night-pill"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="#6A747C" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z"/></svg>記憶在睡眠中歸檔：新單字排最後、明早起床先回想，衝刺期別熬夜。</div>';
 }
 
@@ -572,7 +591,7 @@ function renderDay(){
   html+='</details>'; // close tasks section
 
   // vocab entry (only for new-word days)
-  if(d<=LAST_NEW){
+  if(d<=curLastNew()){
     const words = vocab[d] || [];
     html+='<div class="section"><div class="sec-head"><span class="dot green"></span>第 '+d+' 批單字 · 已輸入 '+words.length+'/'+WPB+'</div>';
     html+='<div class="ventry">'
