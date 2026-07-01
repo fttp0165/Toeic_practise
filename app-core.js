@@ -1255,7 +1255,33 @@ function renderDashboard(){
   root.innerHTML=html;
 }
 
-function renderAll(){ renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
+/* ---------- 專案列（考試日 / 倒數） ---------- */
+function countdownHTML(p){
+  if(!p || !p.start) return '<span class="cd-muted">設定開始日與考試日，開始倒數</span>';
+  if(!p.exam){
+    const td=todayDay();
+    if(td===0)  return '<span class="cd-muted">尚未開始（Day 1 = '+esc(p.start)+'）</span>';
+    if(td===99) return '<span class="cd-done">衝刺已完成 🎉</span>';
+    return '<span class="cd-muted">第 '+td+' / '+curDays()+' 天</span>';
+  }
+  const now=new Date(); now.setHours(0,0,0,0);
+  const e=new Date(p.exam+"T00:00:00");
+  const diff=Math.round((e-now)/86400000);
+  if(diff>0)   return '距離考試還有 <b>'+diff+'</b> 天';
+  if(diff===0) return '<b>今天就是考試日！</b>加油 💪';
+  return '<span class="cd-muted">考試已於 '+Math.abs(diff)+' 天前結束</span>';
+}
+function renderProjectBar(){
+  const bar=$("#projectBar"); if(!bar) return;   // 僅衝刺頁
+  const p=getCurProject();
+  const nameEl=$("#projName"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
+  if(nameEl) nameEl.textContent = p ? p.name : "尚未建立專案";
+  if(si) si.value = p ? (p.start||"") : (startDate||"");
+  if(ei) ei.value = p ? (p.exam||"") : "";
+  if(cd) cd.innerHTML = countdownHTML(p);
+}
+
+function renderAll(){ renderProjectBar(); renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");          // 只有 20 天衝刺頁(index.html)有這些元件
@@ -1266,9 +1292,21 @@ if(startInput){
     startDate=v; localStorage.setItem(LS.start,v);   // 舊 key 相容
     const p=getCurProject();
     if(p) updateProject(p.id,{start:v});             // 同步目前專案（內含 notifyChange）
-    else notifyChange();
+    else { const np=createProject("我的衝刺", v, ($("#exam")&&$("#exam").value)||""); done=np.tasks; } // 首次設定 → 建立專案
     const td=todayDay();
     viewing = (td && td!==0 && td!==99)? td : 1;
+    renderAll();
+  };
+}
+const examInput=$("#exam");
+if(examInput){
+  examInput.onchange=()=>{
+    const v=examInput.value;
+    let p=getCurProject();
+    if(p) updateProject(p.id,{exam:v});              // 更新考試日 → 內部重算天數
+    else { p=createProject("我的衝刺", ($("#start")&&$("#start").value)||"", v); done=p.tasks; }
+    const td=todayDay();
+    viewing = (td && td!==0 && td!==99)? td : (viewing||1);
     renderAll();
   };
 }

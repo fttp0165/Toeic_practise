@@ -28,11 +28,17 @@
     <a class="tab" href="dashboard.html">練習紀錄</a>
   </nav>
 
-  <div class="setup">
-    <label for="start">開始日（Day 1）</label>
-    <input type="date" id="start">
+  <div class="setup" id="projectBar">
+    <div class="proj-head">
+      <span class="proj-name" id="projName">我的衝刺</span>
+      <span class="countdown" id="countdown"></span>
+    </div>
+    <div class="proj-dates">
+      <label>開始日（Day 1）<input type="date" id="start"></label>
+      <label>考試日<input type="date" id="exam"></label>
+    </div>
     <span class="spacer"></span>
-    <button class="linkbtn" id="resetBtn">清除全部進度</button>
+    <button class="linkbtn" id="resetBtn">清除進度</button>
   </div>
 
   <div class="strip-label">20 天 · 點選查看任一天</div>

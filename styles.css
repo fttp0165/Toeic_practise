@@ -51,6 +51,15 @@
     padding:7px 10px;color:var(--ink);background:#FBFCFB;
   }
   .setup .spacer{flex:1;}
+  /* ---------- 專案列（考試日 / 倒數） ---------- */
+  .proj-head{display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap;width:100%;}
+  .proj-name{font-size:16px;font-weight:800;color:var(--ink);}
+  .countdown{font-size:14px;color:var(--muted);}
+  .countdown b{color:var(--due);font-size:19px;font-weight:800;margin:0 1px;}
+  .cd-muted{color:var(--faint);}
+  .cd-done{color:var(--lock);font-weight:700;}
+  .proj-dates{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;}
+  .proj-dates label{display:inline-flex;align-items:center;gap:8px;}
   .linkbtn{
     background:none;border:none;color:var(--faint);font:inherit;font-size:12.5px;
     cursor:pointer;padding:4px;text-decoration:underline;text-underline-offset:3px;
