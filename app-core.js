@@ -761,10 +761,21 @@ function libStatus(w){
   if(ds>=need) return {key:"due", label:"待複習"};
   return {key:"learn", label:(need-ds)+" 天後複習"};
 }
-function libDue(){ return libWords().filter(o=>libStatus(o.word).key==="due"); }
+// 排程對象＝目前單字庫的字＋任何「已開始學習」(有 lo)的批次字。
+// 批次字可從衝刺頁單字庫按「今天新學」加入今日學習，其到期複習也要出現在
+// 單字庫頁「今天要複習」，否則按了按鈕卻沒有地方複習（閉環才算完成）。
+function schedWords(){
+  const out=libWords();
+  Object.keys(vocab).forEach(k=>{
+    if(k==="lib" || !Array.isArray(vocab[k])) return;
+    vocab[k].forEach((w,idx)=>{ if(w.lo) out.push({day:k, idx, word:w}); });
+  });
+  return out;
+}
+function libDue(){ return schedWords().filter(o=>libStatus(o.word).key==="due"); }
 function libCounts(){
   let learning=0, due=0, done=0;
-  libWords().forEach(o=>{
+  schedWords().forEach(o=>{
     const w=o.word; if(!w.lo) return;
     const s=libStatus(w).key;
     if(s==="done") done++; else { learning++; if(s==="due") due++; }
