@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-12 — M2（多專案）＋ 文件 ＋ CD（新分支，PR #22 合併後）
+
+延續已合併的 PR #22，於從最新 `main` 重開的分支上完成剩餘任務：
+
+- **#7 多專案切換 UI**：專案下拉切換、新增（prompt 命名、從今天起算）、重新命名、刪除；`switchProject` 切換時重綁 `done`、重繪。各專案日期/天數/打勾獨立。
+- **#8 刪除／重置防呆**：新增 `guardVocab()` tripwire 包住刪除專案／清除進度，若未來誤動 `vocab` 會 console 告警。實測刪除＋重置後單字池 byte 級不變。
+- **#9 匯出／匯入＋雲端同步帶 projects**：備份升 `_v:2`（含 `projects`+`curproj`）；`adoptProjects()` 於匯入／雲端還原採用外來專案、舊資料自動遷移、`done` 綁回專案；`sync.js` 的 `norm()` 加入 `projects`/`curproj` 讓專案真正上雲。實測匯出→清空→匯入完整還原、舊 v1 備份自動遷移。
+- **#10 回歸驗證**：由 #13 CI 單元測試自動涵蓋（`days=20` 逐日等價），每次 push 守門。
+- **#11 文件**：更新 README（衝刺計畫、多專案、單字池永不清空、資料表加 `projects`/`curproj`）與 `PROJECT_PLAN` 資料模型。
+- **#14 CD**：`deploy.yml`——push 到 `main` 先跑 gate（語法＋測試），綠燈才用官方 Pages actions 部署。**一次性手動**：Settings → Pages → Source 改「GitHub Actions」才會接手（切換前 branch 部署仍運作）。
+
+快取版本號 → `v14`。至此 15 個任務全部完成。
+
+---
+
 ## 2026-07-12 — 「20 天衝刺」→ 可設定目標日的衝刺計畫（PR #22，已合併）
 
 ### 目標
