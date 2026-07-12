@@ -1208,11 +1208,26 @@ function countdownHTML(p){
 function renderProjectBar(){
   const bar=$("#projectBar"); if(!bar) return;   // 僅衝刺頁
   const p=getCurProject();
-  const nameEl=$("#projName"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
-  if(nameEl) nameEl.textContent = p ? p.name : "尚未建立專案";
+  const sel=$("#projSelect"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
+  if(sel){
+    if(!projects.length){ sel.innerHTML='<option value="">尚未建立專案</option>'; sel.value=""; }
+    else {
+      sel.innerHTML = projects.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
+      sel.value = p.id;
+    }
+  }
   if(si) si.value = p ? (p.start||"") : (startDate||"");
   if(ei) ei.value = p ? (p.exam||"") : "";
   if(cd) cd.innerHTML = countdownHTML(p);
+}
+// 切換目前專案：重綁 done、重設檢視日、整頁重繪
+function switchProject(id){
+  setCurProject(id);
+  const p=getCurProject();
+  done = p ? p.tasks : {};
+  const td=todayDay();
+  viewing = (td && td!==0 && td!==99)? td : 1;
+  renderAll();
 }
 
 /* ---------- 學習目標規劃：動態文案（日期條標籤、五階段地圖） ---------- */
@@ -1292,6 +1307,44 @@ if(resetBtn){
       startDate=""; localStorage.setItem(LS.start,"");
       if(startInput) startInput.value=""; viewing=1;
       notifyChange();
+      renderAll();
+    }
+  };
+}
+
+/* ---------- 多專案：切換 / 新增 / 重新命名 / 刪除 ---------- */
+const projSelect=$("#projSelect");
+if(projSelect){ projSelect.onchange=()=>{ if(projSelect.value) switchProject(projSelect.value); }; }
+const projNew=$("#projNew");
+if(projNew){
+  projNew.onclick=()=>{
+    const name=prompt("新專案名稱？（例如「12 月正式考」）", "新的衝刺");
+    if(name===null) return;                       // 取消
+    const p=createProject(name, todayISO(), "");  // 從今天起算、預設天數，之後再設目標日
+    done=p.tasks;
+    const td=todayDay(); viewing=(td && td!==0 && td!==99)? td : 1;
+    renderAll();
+  };
+}
+const projRename=$("#projRename");
+if(projRename){
+  projRename.onclick=()=>{
+    const p=getCurProject(); if(!p){ alert("還沒有專案，先按「新增專案」。"); return; }
+    const name=prompt("重新命名專案：", p.name);
+    if(name===null) return;
+    renameProject(p.id, name);
+    renderAll();
+  };
+}
+const projDelete=$("#projDelete");
+if(projDelete){
+  projDelete.onclick=()=>{
+    const p=getCurProject(); if(!p){ return; }
+    // 只移除該專案的日期與打勾，單字與學習進度一律保留（計劃書 §4.6、§8）
+    if(confirm('刪除專案「'+p.name+'」？只會移除這個專案的日期與打勾，單字不會被刪除。此動作無法復原。')){
+      deleteProject(p.id);
+      const np=getCurProject(); done = np ? np.tasks : {};
+      const td=todayDay(); viewing=(td && td!==0 && td!==99)? td : 1;
       renderAll();
     }
   };
