@@ -1,0 +1,54 @@
+name: Deploy to Pages
+
+# push 到 main 時：先跑語法檢查 + 單元測試（gate），全綠才部署 GitHub Pages。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只跑一個部署，且不取消進行中的部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 部署前檢查（語法 + 單元測試）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JS 語法檢查（node --check）
+        run: |
+          for f in srs.js app-core.js sync.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+      - name: 單元測試（node:test）
+        run: node --test tests/*.test.js
+
+  deploy:
+    name: 部署 GitHub Pages
+    needs: gate          # gate 綠燈才部署
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact（純靜態，整個 repo root）
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
