@@ -109,6 +109,16 @@ function deleteProject(id){
   if(curProj===id) curProj = projects.length? projects[0].id : "";
   saveProjects();
 }
+// 匯入／雲端還原時採用外來的 projects；缺 projects 的舊資料自動遷移，並把 done 綁回目前專案。
+function adoptProjects(inProjects, inCurproj){
+  projects = Array.isArray(inProjects) ? inProjects : [];
+  curProj  = inCurproj || "";
+  if(!projects.length) migrateProjects();   // 舊備份/雲端只有 start+tasks → 建預設專案
+  const p=getCurProject();
+  if(p) done = p.tasks;                      // done 綁定目前專案（與載入期一致）
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
+}
 
 // 目前專案衍生值；無專案時回退舊常數，維持現有行為（渲染改接於任務 #4）
 function curDays(){ const p=getCurProject(); return (p && p.days>=1)? p.days : TOTAL; }
@@ -363,7 +373,7 @@ function wireWordControls(root){
 
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
-function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}); }
+function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj}); }
 
 function save(){
   localStorage.setItem(LS.tasks, JSON.stringify(done));   // 舊 key 相容
@@ -994,7 +1004,7 @@ function applyCSV(text){
   return {added, dup};
 }
 function buildBackupJSON(){
-  return JSON.stringify({ _app:"toeic20", _v:1, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs }, null, 2);
+  return JSON.stringify({ _app:"toeic20", _v:2, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj }, null, 2);
 }
 function applyBackupJSON(text){
   let obj; try{ obj=JSON.parse(text); }catch(e){ return {ok:false, err:"JSON 格式錯誤"}; }
@@ -1002,12 +1012,13 @@ function applyBackupJSON(text){
   startDate=obj.start||""; done=obj.tasks||{}; vocab=obj.vocab||{}; log=obj.log||{}; libs=Array.isArray(obj.libs)?obj.libs:[];
   Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k],x:0}; });
   migrateVocab(vocab); migrateLibs();
+  adoptProjects(obj.projects, obj.curproj);   // 還原專案；舊備份（無 projects）自動遷移，done 綁回專案
   localStorage.setItem(LS.start,startDate);
   localStorage.setItem(LS.tasks,JSON.stringify(done));
   localStorage.setItem(LS.vocab,JSON.stringify(vocab));
   localStorage.setItem(LS.log,JSON.stringify(log));
   localStorage.setItem(LS.libs,JSON.stringify(libs));
-  if(startInput) startInput.value=startDate;
+  if(startInput) startInput.value=curStart();
   notifyChange(); renderAll();
   return {ok:true};
 }
@@ -1365,9 +1376,9 @@ if(projDelete){
 
 /* ---------- bridge for the cloud sync layer (sync.js) ---------- */
 window.TOEIC = {
-  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}; },
+  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj}; },
   isLocalEmpty(){
-    return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
+    return !startDate && projects.length===0 && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
   },
   setOnChange(fn){ onChange = fn; },
   applyRemote(data){
@@ -1378,12 +1389,13 @@ window.TOEIC = {
     libs      = (data && Array.isArray(data.libs)) ? data.libs : [];
     migrateVocab(vocab);
     migrateLibs();
+    adoptProjects(data && data.projects, data && data.curproj);   // 雲端還原專案；舊資料自動遷移、done 綁回專案
     localStorage.setItem(LS.start, startDate);
     localStorage.setItem(LS.tasks, JSON.stringify(done));
     localStorage.setItem(LS.vocab, JSON.stringify(vocab));
     localStorage.setItem(LS.log, JSON.stringify(log));
     localStorage.setItem(LS.libs, JSON.stringify(libs));
-    if(startInput) startInput.value = startDate;
+    if(startInput) startInput.value = curStart();
     const td = todayDay();
     viewing = (td && td!==0 && td!==99) ? td : (viewing || 1);
     renderAll();
