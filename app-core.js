@@ -31,6 +31,7 @@ let editing = null;     // "day:idx" 正在編輯的單字，或 null
 let libOpen = false;    // 單字庫卡片是否展開
 let libMode = "list";   // "list" | "cards"
 let libQuery = "";      // 單字庫搜尋字串
+let libSort = "date-desc"; // 衝刺頁單字庫排序：date-desc/date-asc · az/za
 let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
 let lpSort = "date-desc"; // 全部單字排序：date-desc/date-asc(建立日期) · az/za(字母)
@@ -645,6 +646,7 @@ function renderLibrary(){
   if(libOpen){
     html+='<div class="lib-body">';
     html+='<div class="lib-ctrl"><input id="libSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(libQuery)+'" autocomplete="off">'
+      +'<select id="libSort" class="lib-sort" aria-label="排序">'+sortOptionsHTML(libSort)+'</select>'
       +'<div class="lib-modes">'
       +'<button class="lib-mode'+(libMode==="list"?" on":"")+'" data-mode="list">列表</button>'
       +'<button class="lib-mode'+(libMode==="cards"?" on":"")+'" data-mode="cards">翻卡</button></div></div>';
@@ -658,15 +660,16 @@ function renderLibrary(){
         || String(w.n||'').toLowerCase().includes(q);
     };
     const filtered = q ? all.filter(matches) : all;
+    const sorted = sortLibWords(filtered, libSort);
 
     if(!total){
       html+='<div class="vempty">單字庫還是空的。到每天的「第 N 批單字」輸入後，會自動收進這裡。</div>';
-    } else if(!filtered.length){
+    } else if(!sorted.length){
       html+='<div class="vempty">找不到符合「'+esc(libQuery)+'」的單字。</div>';
     } else if(libMode==="cards"){
-      html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+filtered.length+' 張。</div>';
+      html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+sorted.length+' 張。</div>';
       html+='<div class="lib-cards">';
-      filtered.forEach(o=>{
+      sorted.forEach(o=>{
         const w=o.word;
         html+='<div class="flip">'
           +'<div class="fw">'+esc(w.w)+sayBtn(w.w, true)+'</div>'
@@ -674,12 +677,12 @@ function renderLibrary(){
           +'<div class="fm">'+esc(w.m||'(未填意思)')+'</div>'
           +(w.n?'<div class="fn">'+esc(w.n)+'</div>':'')
           +'<div class="hintr">點按看意思</div>'
-          +'<span class="flip-batch">第 '+o.day+' 批</span></div>';
+          +'<span class="flip-batch">'+groupLabel(o.day)+'</span></div>';
       });
       html+='</div>';
     } else {
       html+='<div class="lib-list">';
-      filtered.forEach(o=>{ html+=wordRowHTML(o.day, o.idx, o.word, true); });
+      sorted.forEach(o=>{ html+=libRowHTML(o.day, o.idx, o.word); });   // libRowHTML 帶學習狀態徽章 + 今天新學按鈕
       html+='</div>';
     }
     html+='</div>'; // lib-body
@@ -697,6 +700,8 @@ function renderLibrary(){
       if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }
     };
     root.querySelectorAll(".lib-mode").forEach(b=>{ b.onclick=()=>{ libMode=b.dataset.mode; renderLibrary(); }; });
+    const sortSel=root.querySelector("#libSort"); if(sortSel) sortSel.onchange=()=>{ libSort=sortSel.value; renderLibrary(); };
+    root.querySelectorAll("[data-learn]").forEach(el=>{ el.onclick=e=>{ e.stopPropagation(); const p=el.getAttribute("data-learn").split(":"); startLearning(p[0],+p[1]); }; });
     wireWordControls(root);
   }
 }
@@ -1043,7 +1048,14 @@ function sortLibWords(arr, mode){
   else /* date-desc */        out.sort((x,y)=> cmp(da(y),da(x)) || cmp(wl(x),wl(y)));
   return out;
 }
-function sortOptHTML(v,label){ return '<option value="'+v+'"'+(lpSort===v?' selected':'')+'>'+label+'</option>'; }
+function sortOptHTML(v,label,cur){ return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+label+'</option>'; }
+// 共用：排序下拉的選項（四種），cur=目前選取值
+function sortOptionsHTML(cur){
+  return sortOptHTML("date-desc","建立日期：新→舊",cur)
+    + sortOptHTML("date-asc","建立日期：舊→新",cur)
+    + sortOptHTML("az","字母：A→Z",cur)
+    + sortOptHTML("za","字母：Z→A",cur);
+}
 
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
@@ -1111,12 +1123,7 @@ function renderLibPage(){
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>全部單字 · '+all.length+'</h3>'
     +'<div class="lib-ctrl"><input id="lpSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(lpQuery)+'" autocomplete="off">'
-    +'<select id="lpSort" class="lib-sort" aria-label="排序">'
-    + sortOptHTML("date-desc","建立日期：新→舊")
-    + sortOptHTML("date-asc","建立日期：舊→新")
-    + sortOptHTML("az","字母：A→Z")
-    + sortOptHTML("za","字母：Z→A")
-    +'</select>'
+    +'<select id="lpSort" class="lib-sort" aria-label="排序">'+sortOptionsHTML(lpSort)+'</select>'
     +'<div class="lib-modes">'
     +'<button class="lib-mode'+(lpMode==="list"?" on":"")+'" data-lpmode="list">列表</button>'
     +'<button class="lib-mode'+(lpMode==="cards"?" on":"")+'" data-lpmode="cards">翻卡</button></div></div>';
