@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TOEIC 20 天衝刺 · 海馬迴複習表</title>
+<title>TOEIC 衝刺計畫 · 海馬迴複習表</title>
 <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="kicker">海馬迴間隔複習</div>
-    <h1>TOEIC 20 天衝刺表</h1>
-    <div class="sub">300 → 500 · 每天主動回想，把單字騙進長期記憶</div>
+    <h1>TOEIC 衝刺計畫</h1>
+    <div class="sub">設定目標日、倒數到考試 · 每天主動回想，把單字騙進長期記憶</div>
   </header>
 
   <div class="syncbar">
@@ -23,7 +23,7 @@
   </div>
 
   <nav class="tabs">
-    <span class="tab on">20 天衝刺</span>
+    <span class="tab on">衝刺計畫</span>
     <a class="tab" href="library.html">單字庫</a>
     <a class="tab" href="dashboard.html">練習紀錄</a>
   </nav>
@@ -41,7 +41,7 @@
     <button class="linkbtn" id="resetBtn">清除進度</button>
   </div>
 
-  <div class="strip-label">20 天 · 點選查看任一天</div>
+  <div class="strip-label" id="stripLabel">點選查看任一天</div>
   <div class="strip" id="strip"></div>
 
   <div id="dayArea"></div>
@@ -68,14 +68,8 @@
   </details>
 
   <details>
-    <summary>20 天五階段 · 進度地圖 <span class="chev">▾</span></summary>
-    <div class="acc-body">
-      <div class="phase-line"><span class="rng">Day 1–3</span><div><b>打地基</b>　模擬考抓底、熟記 7 大 Part 配分、開始滾單字。</div></div>
-      <div class="phase-line"><span class="rng">Day 4–9</span><div><b>聽力＋文法主攻</b>　CP 值最高，建立「聽得懂」與「看到文法題知道考什麼」。</div></div>
-      <div class="phase-line"><span class="rng">Day 10–14</span><div><b>擴張 Part 3/4/6</b>　關鍵：先看題目再聽，知道要抓什麼資訊。</div></div>
-      <div class="phase-line"><span class="rng">Day 15–18</span><div><b>攻 Part 7＋時間管理</b>　用關鍵字定位答案，不逐字讀，先寫單篇。</div></div>
-      <div class="phase-line"><span class="rng">Day 19–20</span><div><b>全真模擬＋收尾</b>　計時實戰、調節奏、複習錯題本與單字本。</div></div>
-    </div>
+    <summary>五階段 · 進度地圖 <span class="chev">▾</span></summary>
+    <div class="acc-body" id="phaseMap"><!-- 依目前計畫天數動態產生 --></div>
   </details>
 
   <div class="foot">

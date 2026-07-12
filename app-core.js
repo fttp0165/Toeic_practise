@@ -103,6 +103,11 @@ function deleteProject(id){
 function curDays(){ const p=getCurProject(); return (p && p.days>=1)? p.days : TOTAL; }
 function curLastNew(){ return lastNewOf(curDays()); }   // 收尾段不背新字；退化規則見 lastNewOf
 function curStart(){ const p=getCurProject(); return p ? p.start : startDate; } // 目前專案開始日，無專案時回退舊全域值
+function todayISO(){   // 今天的本地日期 YYYY-MM-DD
+  const d=new Date(); d.setHours(0,0,0,0);
+  const m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return d.getFullYear()+"-"+m+"-"+day;
+}
 
 // 一次性遷移（計劃書 §6）：舊的單一 start + tasks → 預設專案。
 // 舊 key（toeic20_start / toeic20_tasks）保留讀取相容、不即刻刪除；vocab／libs／pr 一律不動。
@@ -1210,7 +1215,37 @@ function renderProjectBar(){
   if(cd) cd.innerHTML = countdownHTML(p);
 }
 
-function renderAll(){ renderProjectBar(); renderStrip(); renderDay(); renderProgress(); renderLibrary(); renderLibPage(); renderDashboard(); }
+/* ---------- 學習目標規劃：動態文案（日期條標籤、五階段地圖） ---------- */
+const PHASE_MAP=[
+  {name:"打地基",           blurb:"模擬考抓底、熟記 7 大 Part 配分、開始滾單字。"},
+  {name:"聽力＋文法主攻",   blurb:"CP 值最高，建立「聽得懂」與「看到文法題知道考什麼」。"},
+  {name:"擴張 Part 3/4/6",  blurb:"先看題目再聽，知道要抓什麼資訊。"},
+  {name:"攻 Part 7＋時間管理",blurb:"用關鍵字定位答案，不逐字讀，先寫單篇。"},
+  {name:"全真模擬＋收尾",   blurb:"計時實戰、調節奏、複習錯題本與單字本。"}
+];
+function phaseRanges(days){
+  const b=phaseBounds(days);
+  const starts=[1, b[0]+1, b[1]+1, b[2]+1, b[3]+1];
+  const ends  =[b[0], b[1], b[2], b[3], days];
+  return starts.map((s,i)=>({s, e:ends[i]}));
+}
+function renderStripLabel(){
+  const el=$("#stripLabel"); if(!el) return;
+  el.textContent = "共 "+curDays()+" 天 · 點選查看任一天";
+}
+function renderPhaseMap(){
+  const el=$("#phaseMap"); if(!el) return;
+  const r=phaseRanges(curDays());
+  el.innerHTML = PHASE_MAP.map((p,i)=>{
+    const s=r[i].s, e=r[i].e;
+    if(s>e) return "";                      // 極短計畫可能壓縮掉某段
+    const rng = (s===e) ? ("Day "+s) : ("Day "+s+"–"+e);
+    return '<div class="phase-line"><span class="rng">'+rng+'</span>'
+      +'<div><b>'+esc(p.name)+'</b>　'+esc(p.blurb)+'</div></div>';
+  }).join("");
+}
+
+function renderAll(){ renderProjectBar(); renderStripLabel(); renderStrip(); renderDay(); renderProgress(); renderPhaseMap(); renderLibrary(); renderLibPage(); renderDashboard(); }
 
 /* ---------- init ---------- */
 const startInput=$("#start");          // 只有 20 天衝刺頁(index.html)有這些元件
@@ -1232,8 +1267,14 @@ if(examInput){
   examInput.onchange=()=>{
     const v=examInput.value;
     let p=getCurProject();
-    if(p) updateProject(p.id,{exam:v});              // 更新考試日 → 內部重算天數
-    else { p=createProject("我的衝刺", ($("#start")&&$("#start").value)||"", v); done=p.tasks; }
+    if(p){
+      const patch={exam:v};
+      if(!p.start) patch.start=todayISO();           // 只選目標日 → 從今天起算（規劃現在→目標日）
+      updateProject(p.id, patch);                     // 更新目標日 → 內部重算天數
+    } else {
+      const st=($("#start")&&$("#start").value)||todayISO();
+      p=createProject("我的衝刺", st, v); done=p.tasks;
+    }
     const td=todayDay();
     viewing = (td && td!==0 && td!==99)? td : (viewing||1);
     renderAll();
