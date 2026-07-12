@@ -33,6 +33,7 @@ let libMode = "list";   // "list" | "cards"
 let libQuery = "";      // 單字庫搜尋字串
 let lpQuery = "";       // 單字庫頁面的搜尋字串
 let lpMode = "list";    // 全部單字檢視："list" | "cards"(翻卡)
+let lpSort = "date-desc"; // 全部單字排序：date-desc/date-asc(建立日期) · az/za(字母)
 let quiz = null;        // 測驗中的 session（null = 未測驗）
 let quizDate = "";      // 測驗選的學習日期（""＝預設今天/最近）
 
@@ -1029,6 +1030,21 @@ function downloadFile(filename, text, mime){
   setTimeout(()=>{ if(a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 0);
 }
 
+// 全部單字排序：字母(az/za) 或 建立日期(date-asc/date-desc)。
+// da 為 YYYY-MM-DD 可直接字串比較；缺 da 者一律視為最舊；同鍵以字母排序破平手。
+function sortLibWords(arr, mode){
+  const cmp=(a,b)=> a<b?-1:a>b?1:0;
+  const wl=o=>String(o.word.w||"").trim().toLowerCase();
+  const da=o=>String(o.word.da||"");
+  const out=arr.slice();
+  if(mode==="az")        out.sort((x,y)=> cmp(wl(x),wl(y)));
+  else if(mode==="za")   out.sort((x,y)=> cmp(wl(y),wl(x)));
+  else if(mode==="date-asc")  out.sort((x,y)=> cmp(da(x),da(y)) || cmp(wl(x),wl(y)));
+  else /* date-desc */        out.sort((x,y)=> cmp(da(y),da(x)) || cmp(wl(x),wl(y)));
+  return out;
+}
+function sortOptHTML(v,label){ return '<option value="'+v+'"'+(lpSort===v?' selected':'')+'>'+label+'</option>'; }
+
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
   if(quiz){ root.innerHTML=quizHTML(); wireQuiz(root); return; }   // 測驗中：全頁顯示測驗
@@ -1095,6 +1111,12 @@ function renderLibPage(){
 
   html+='<div class="lp-sec"><h3><span class="dot" style="background:var(--ink)"></span>全部單字 · '+all.length+'</h3>'
     +'<div class="lib-ctrl"><input id="lpSearch" placeholder="搜尋 單字／中文／例句／備註" value="'+esc(lpQuery)+'" autocomplete="off">'
+    +'<select id="lpSort" class="lib-sort" aria-label="排序">'
+    + sortOptHTML("date-desc","建立日期：新→舊")
+    + sortOptHTML("date-asc","建立日期：舊→新")
+    + sortOptHTML("az","字母：A→Z")
+    + sortOptHTML("za","字母：Z→A")
+    +'</select>'
     +'<div class="lib-modes">'
     +'<button class="lib-mode'+(lpMode==="list"?" on":"")+'" data-lpmode="list">列表</button>'
     +'<button class="lib-mode'+(lpMode==="cards"?" on":"")+'" data-lpmode="cards">翻卡</button></div></div>';
@@ -1104,13 +1126,14 @@ function renderLibPage(){
     return String(w.w||'').toLowerCase().includes(q) || String(w.m||'').toLowerCase().includes(q)
       || (w.exs||[]).some(x=>exE(x).toLowerCase().includes(q)||exT(x).toLowerCase().includes(q)) || String(w.n||'').toLowerCase().includes(q);
   }) : all;
+  const sorted = sortLibWords(filtered, lpSort);
   if(!all.length){ html+='<div class="lp-empty">單字庫還是空的。用上面的「新增單字」開始，或在 20 天衝刺裡輸入的字也會出現在這。</div>'; }
-  else if(!filtered.length){ html+='<div class="lp-empty">找不到符合「'+esc(lpQuery)+'」的單字。</div>'; }
+  else if(!sorted.length){ html+='<div class="lp-empty">找不到符合「'+esc(lpQuery)+'」的單字。</div>'; }
   else if(lpMode==="cards"){
-    html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+filtered.length+' 張。</div>';
-    html+='<div class="lib-cards">'; filtered.forEach(o=>{ html+=libFlipCardHTML(o.day, o.word); }); html+='</div>';
+    html+='<div class="lib-cardnote">先回想中文，再點卡片翻開驗證。共 '+sorted.length+' 張。</div>';
+    html+='<div class="lib-cards">'; sorted.forEach(o=>{ html+=libFlipCardHTML(o.day, o.word); }); html+='</div>';
   }
-  else { html+='<div class="lib-list">'; filtered.forEach(o=>{ html+=libRowHTML(o.day, o.idx, o.word); }); html+='</div>'; }
+  else { html+='<div class="lib-list">'; sorted.forEach(o=>{ html+=libRowHTML(o.day, o.idx, o.word); }); html+='</div>'; }
   html+='</div>';
 
   root.innerHTML=html;
@@ -1138,6 +1161,7 @@ function renderLibPage(){
   const qd=root.querySelector("#quizDate"); if(qd) qd.onchange=()=>{ quizDate=qd.value; renderLibPage(); };
   const qs=root.querySelector("[data-quiz-start]"); if(qs) qs.onclick=()=>{ const d=root.querySelector("#quizDate"); startQuiz(d?d.value:quizDefaultDate()); };
   root.querySelectorAll("[data-lpmode]").forEach(b=>{ b.onclick=()=>{ lpMode=b.getAttribute("data-lpmode"); renderLibPage(); }; });
+  const sortSel=root.querySelector("#lpSort"); if(sortSel) sortSel.onchange=()=>{ lpSort=sortSel.value; renderLibPage(); };
   const s=root.querySelector("#lpSearch");
   if(s) s.oninput=()=>{ lpQuery=s.value; renderLibPage();
     const s2=document.querySelector("#lpSearch"); if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length,s2.value.length); } };

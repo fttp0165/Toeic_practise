@@ -222,6 +222,7 @@
   .lib-body{padding:0 18px 18px;}
   .lib-ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
   .lib-ctrl input{flex:1;min-width:150px;font:inherit;font-size:14px;border:1px solid var(--line-strong);border-radius:9px;padding:8px 11px;background:#FBFCFB;color:var(--ink);}
+  .lib-sort{font:inherit;font-size:13px;font-weight:700;color:var(--ink);border:1px solid var(--line-strong);border-radius:9px;padding:8px 10px;background:#FBFCFB;cursor:pointer;flex:0 0 auto;}
   .lib-modes{display:flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden;flex:0 0 auto;}
   .lib-mode{background:var(--surface);border:none;padding:8px 15px;font:inherit;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
   .lib-mode.on{background:var(--lock);color:#fff;}
