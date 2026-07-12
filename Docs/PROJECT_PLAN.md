@@ -80,8 +80,10 @@
 
 | key | 型別 | 內容 |
 |---|---|---|
-| `toeic20_start` | string | 開始日，格式 `YYYY-MM-DD` |
-| `toeic20_tasks` | object | `{ "d{day}:{taskId}": true }`，只存已完成項 |
+| `toeic20_projects` | array | **衝刺專案清單**：`[{ id, name, start, exam, days, tasks }]`。`exam`＝考試/目標日、`days`＝總天數（由 `exam−start` 推算或手動）、`tasks`＝該專案的 `{ "d{day}:{taskId}": true }`。取代固定 20 天，可多份並存、隨雲端同步。 |
+| `toeic20_curproj` | string | 目前開啟的專案 id。 |
+| `toeic20_start` | string | （相容）舊版單一開始日 `YYYY-MM-DD`；現由各專案的 `start` 保存，僅作遷移相容。 |
+| `toeic20_tasks` | object | （相容）舊版 `{ "d{day}:{taskId}": true }`；現由各專案的 `tasks` 保存。 |
 | `toeic20_vocab` | object | `{ "{day}": [ { w, m, exs:[{e,t},..], n, lo?, ri? }, ... ] }`。w=單字 m=中文 exs=例句陣列（每筆 `{e:英文, t:中文翻譯}`；舊的字串自動轉成 `{e, t:""}`）n=備註。`lo`=單字庫開始學習日(YYYY-MM-DD)、`ri`=已完成間隔階段(0..4)，僅單字庫頁面用、選填。鍵除了數字批次(第 N 批)外另有 `"lib"` 桶＝單字庫專屬、不屬任何 20 天批次。單字跨全表去重（trim+不分大小寫），重複輸入只把新例句補進既有的字、不另建、不重排批次。舊 `ex`(字串) 載入時自動轉成 `exs`。 |
 | `toeic20_view` | string | 上次所在分頁：`sprint`(20 天衝刺) 或 `lib`(海馬迴單字庫)。 |
 | 單字 `pr` 欄 | object | 逐字練習紀錄，存在每個單字物件內：`pr = { "YYYY-MM-DD": { c:答對, x:答錯 } }`。測驗答對／按「記得」記入 `c`，答錯／按「忘了」記入 `x`。隨 `vocab` 雲端同步。 |

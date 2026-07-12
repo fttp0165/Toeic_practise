@@ -51,6 +51,17 @@ function saveProjects(){
 }
 function genProjId(){ return "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 
+// 防呆：專案操作（刪除／重置）絕不能動到單字池（計劃書 §4.6、§8：單字持續累積、永不清空）。
+// 包住高風險操作；萬一未來有人改壞、動到 vocab，這裡會在 console 告警（tripwire）。
+function guardVocab(label, fn){
+  const before = JSON.stringify(vocab);
+  const r = fn();
+  if(JSON.stringify(vocab) !== before){
+    console.error("[toeic] 單字池在「"+label+"」時被意外變更——不允許（單字持續累積、永不清空）。");
+  }
+  return r;
+}
+
 // 由開始日與考試日推算總天數（含頭尾）；缺考試日則回退 fallback，再退回 TOTAL
 function computeDays(start, exam, fallback){
   if(start && exam){
@@ -97,6 +108,16 @@ function deleteProject(id){
   projects.splice(i,1);
   if(curProj===id) curProj = projects.length? projects[0].id : "";
   saveProjects();
+}
+// 匯入／雲端還原時採用外來的 projects；缺 projects 的舊資料自動遷移，並把 done 綁回目前專案。
+function adoptProjects(inProjects, inCurproj){
+  projects = Array.isArray(inProjects) ? inProjects : [];
+  curProj  = inCurproj || "";
+  if(!projects.length) migrateProjects();   // 舊備份/雲端只有 start+tasks → 建預設專案
+  const p=getCurProject();
+  if(p) done = p.tasks;                      // done 綁定目前專案（與載入期一致）
+  localStorage.setItem(LS.projects, JSON.stringify(projects));
+  localStorage.setItem(LS.curproj, curProj);
 }
 
 // 目前專案衍生值；無專案時回退舊常數，維持現有行為（渲染改接於任務 #4）
@@ -352,7 +373,7 @@ function wireWordControls(root){
 
 /* sync hook: cloud layer registers a callback to push local edits upstream */
 let onChange = null;
-function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}); }
+function notifyChange(){ if(onChange) onChange({start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj}); }
 
 function save(){
   localStorage.setItem(LS.tasks, JSON.stringify(done));   // 舊 key 相容
@@ -983,7 +1004,7 @@ function applyCSV(text){
   return {added, dup};
 }
 function buildBackupJSON(){
-  return JSON.stringify({ _app:"toeic20", _v:1, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs }, null, 2);
+  return JSON.stringify({ _app:"toeic20", _v:2, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj }, null, 2);
 }
 function applyBackupJSON(text){
   let obj; try{ obj=JSON.parse(text); }catch(e){ return {ok:false, err:"JSON 格式錯誤"}; }
@@ -991,12 +1012,13 @@ function applyBackupJSON(text){
   startDate=obj.start||""; done=obj.tasks||{}; vocab=obj.vocab||{}; log=obj.log||{}; libs=Array.isArray(obj.libs)?obj.libs:[];
   Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k],x:0}; });
   migrateVocab(vocab); migrateLibs();
+  adoptProjects(obj.projects, obj.curproj);   // 還原專案；舊備份（無 projects）自動遷移，done 綁回專案
   localStorage.setItem(LS.start,startDate);
   localStorage.setItem(LS.tasks,JSON.stringify(done));
   localStorage.setItem(LS.vocab,JSON.stringify(vocab));
   localStorage.setItem(LS.log,JSON.stringify(log));
   localStorage.setItem(LS.libs,JSON.stringify(libs));
-  if(startInput) startInput.value=startDate;
+  if(startInput) startInput.value=curStart();
   notifyChange(); renderAll();
   return {ok:true};
 }
@@ -1208,11 +1230,26 @@ function countdownHTML(p){
 function renderProjectBar(){
   const bar=$("#projectBar"); if(!bar) return;   // 僅衝刺頁
   const p=getCurProject();
-  const nameEl=$("#projName"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
-  if(nameEl) nameEl.textContent = p ? p.name : "尚未建立專案";
+  const sel=$("#projSelect"), cd=$("#countdown"), si=$("#start"), ei=$("#exam");
+  if(sel){
+    if(!projects.length){ sel.innerHTML='<option value="">尚未建立專案</option>'; sel.value=""; }
+    else {
+      sel.innerHTML = projects.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
+      sel.value = p.id;
+    }
+  }
   if(si) si.value = p ? (p.start||"") : (startDate||"");
   if(ei) ei.value = p ? (p.exam||"") : "";
   if(cd) cd.innerHTML = countdownHTML(p);
+}
+// 切換目前專案：重綁 done、重設檢視日、整頁重繪
+function switchProject(id){
+  setCurProject(id);
+  const p=getCurProject();
+  done = p ? p.tasks : {};
+  const td=todayDay();
+  viewing = (td && td!==0 && td!==99)? td : 1;
+  renderAll();
 }
 
 /* ---------- 學習目標規劃：動態文案（日期條標籤、五階段地圖） ---------- */
@@ -1285,11 +1322,13 @@ if(resetBtn){
   resetBtn.onclick=()=>{
     // 只清目前專案的打勾與日期，單字與學習進度一律保留（計劃書 §4.6、§8）
     if(confirm("確定清除目前專案的打勾進度與開始日？單字不會被刪除。此動作無法復原。")){
-      const p=getCurProject();
-      if(p){ p.start=""; p.exam=""; p.days=TOTAL; p.tasks={}; done=p.tasks; saveProjects(); }
-      else { done={}; }
-      localStorage.setItem(LS.tasks, JSON.stringify(done));
-      startDate=""; localStorage.setItem(LS.start,"");
+      guardVocab("清除進度", ()=>{
+        const p=getCurProject();
+        if(p){ p.start=""; p.exam=""; p.days=TOTAL; p.tasks={}; done=p.tasks; saveProjects(); }
+        else { done={}; }
+        localStorage.setItem(LS.tasks, JSON.stringify(done));
+        startDate=""; localStorage.setItem(LS.start,"");
+      });
       if(startInput) startInput.value=""; viewing=1;
       notifyChange();
       renderAll();
@@ -1297,11 +1336,49 @@ if(resetBtn){
   };
 }
 
+/* ---------- 多專案：切換 / 新增 / 重新命名 / 刪除 ---------- */
+const projSelect=$("#projSelect");
+if(projSelect){ projSelect.onchange=()=>{ if(projSelect.value) switchProject(projSelect.value); }; }
+const projNew=$("#projNew");
+if(projNew){
+  projNew.onclick=()=>{
+    const name=prompt("新專案名稱？（例如「12 月正式考」）", "新的衝刺");
+    if(name===null) return;                       // 取消
+    const p=createProject(name, todayISO(), "");  // 從今天起算、預設天數，之後再設目標日
+    done=p.tasks;
+    const td=todayDay(); viewing=(td && td!==0 && td!==99)? td : 1;
+    renderAll();
+  };
+}
+const projRename=$("#projRename");
+if(projRename){
+  projRename.onclick=()=>{
+    const p=getCurProject(); if(!p){ alert("還沒有專案，先按「新增專案」。"); return; }
+    const name=prompt("重新命名專案：", p.name);
+    if(name===null) return;
+    renameProject(p.id, name);
+    renderAll();
+  };
+}
+const projDelete=$("#projDelete");
+if(projDelete){
+  projDelete.onclick=()=>{
+    const p=getCurProject(); if(!p){ return; }
+    // 只移除該專案的日期與打勾，單字與學習進度一律保留（計劃書 §4.6、§8）
+    if(confirm('刪除專案「'+p.name+'」？只會移除這個專案的日期與打勾，單字不會被刪除。此動作無法復原。')){
+      guardVocab("刪除專案", ()=>{ deleteProject(p.id); });
+      const np=getCurProject(); done = np ? np.tasks : {};
+      const td=todayDay(); viewing=(td && td!==0 && td!==99)? td : 1;
+      renderAll();
+    }
+  };
+}
+
 /* ---------- bridge for the cloud sync layer (sync.js) ---------- */
 window.TOEIC = {
-  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log, libs:libs}; },
+  getLocal(){ return {start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj}; },
   isLocalEmpty(){
-    return !startDate && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
+    return !startDate && projects.length===0 && Object.keys(done).length===0 && Object.keys(vocab).length===0 && Object.keys(log).length===0;
   },
   setOnChange(fn){ onChange = fn; },
   applyRemote(data){
@@ -1312,12 +1389,13 @@ window.TOEIC = {
     libs      = (data && Array.isArray(data.libs)) ? data.libs : [];
     migrateVocab(vocab);
     migrateLibs();
+    adoptProjects(data && data.projects, data && data.curproj);   // 雲端還原專案；舊資料自動遷移、done 綁回專案
     localStorage.setItem(LS.start, startDate);
     localStorage.setItem(LS.tasks, JSON.stringify(done));
     localStorage.setItem(LS.vocab, JSON.stringify(vocab));
     localStorage.setItem(LS.log, JSON.stringify(log));
     localStorage.setItem(LS.libs, JSON.stringify(libs));
-    if(startInput) startInput.value = startDate;
+    if(startInput) startInput.value = curStart();
     const td = todayDay();
     viewing = (td && td!==0 && td!==99) ? td : (viewing || 1);
     renderAll();

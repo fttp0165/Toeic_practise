@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TOEIC 衝刺計畫 · 海馬迴複習表</title>
-<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
 <div class="wrap">
@@ -30,15 +30,20 @@
 
   <div class="setup" id="projectBar">
     <div class="proj-head">
-      <span class="proj-name" id="projName">我的衝刺</span>
+      <select class="proj-select" id="projSelect" aria-label="選擇專案"></select>
       <span class="countdown" id="countdown"></span>
     </div>
     <div class="proj-dates">
       <label>開始日（Day 1）<input type="date" id="start"></label>
       <label>考試日<input type="date" id="exam"></label>
     </div>
-    <span class="spacer"></span>
-    <button class="linkbtn" id="resetBtn">清除進度</button>
+    <div class="proj-actions">
+      <button class="linkbtn" id="projNew">＋ 新增專案</button>
+      <button class="linkbtn" id="projRename">重新命名</button>
+      <button class="linkbtn" id="projDelete">刪除專案</button>
+      <span class="spacer"></span>
+      <button class="linkbtn" id="resetBtn">清除進度</button>
+    </div>
   </div>
 
   <div class="strip-label" id="stripLabel">點選查看任一天</div>
@@ -78,13 +83,13 @@
   </div>
 </div>
 
-<script src="srs.js?v=13"></script>
-<script src="app-core.js?v=13"></script>
+<script src="srs.js?v=14"></script>
+<script src="app-core.js?v=14"></script>
 
 <!-- ============================================================
      雲端同步層（Firebase）— 純靜態 CDN module，無 build。
      未填 config 時自動退回「純本機模式」，不影響原本功能。
      ============================================================ -->
-<script type="module" src="sync.js?v=13"></script>
+<script type="module" src="sync.js?v=14"></script>
 </body>
 </html>
