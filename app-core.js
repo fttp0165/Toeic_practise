@@ -74,11 +74,16 @@ function computeDays(start, exam, fallback){
   return (fallback>=1)? fallback : TOTAL;
 }
 
+// 保證專案一定有 tasks 物件——舊版/外來（雲端）資料可能缺此欄位，
+// 若讓 done=undefined 會使 dayStats 存取 done[key] 整頁 render 崩潰。
+function ensureTasks(p){ if(p && (typeof p.tasks!=="object" || p.tasks===null || Array.isArray(p.tasks))) p.tasks={}; return p; }
+function normalizeProjects(){ if(Array.isArray(projects)) projects.forEach(ensureTasks); }
+
 function getCurProject(){
   if(!projects.length) return null;
   let p=projects.find(x=>x.id===curProj);
   if(!p){ p=projects[0]; curProj=p.id; }   // 目前 id 失效時回退第一個
-  return p;
+  return ensureTasks(p);                    // 單一 choke point：確保 tasks 存在
 }
 function setCurProject(id){
   if(projects.some(x=>x.id===id)){ curProj=id; localStorage.setItem(LS.curproj, curProj); }
@@ -115,9 +120,10 @@ function deleteProject(id){
 function adoptProjects(inProjects, inCurproj){
   projects = Array.isArray(inProjects) ? inProjects : [];
   curProj  = inCurproj || "";
+  normalizeProjects();                       // 補齊缺 tasks 的外來專案（避免 done=undefined 崩潰）
   if(!projects.length) migrateProjects();   // 舊備份/雲端只有 start+tasks → 建預設專案
   const p=getCurProject();
-  if(p) done = p.tasks;                      // done 綁定目前專案（與載入期一致）
+  done = p ? p.tasks : {};                    // done 綁定目前專案（與載入期一致）
   localStorage.setItem(LS.projects, JSON.stringify(projects));
   localStorage.setItem(LS.curproj, curProj);
 }
@@ -143,6 +149,7 @@ function migrateProjects(){
   localStorage.setItem(LS.projects, JSON.stringify(projects));
   localStorage.setItem(LS.curproj, curProj);
 }
+normalizeProjects();   // 補齊 localStorage 中缺 tasks 的專案（相容舊/外來資料）
 migrateProjects();
 
 // 任務改為以「目前專案」為準（計劃書 §4.1）：把 done 綁定成目前專案的 tasks 物件，
