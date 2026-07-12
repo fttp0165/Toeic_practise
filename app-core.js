@@ -51,6 +51,17 @@ function saveProjects(){
 }
 function genProjId(){ return "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 
+// 防呆：專案操作（刪除／重置）絕不能動到單字池（計劃書 §4.6、§8：單字持續累積、永不清空）。
+// 包住高風險操作；萬一未來有人改壞、動到 vocab，這裡會在 console 告警（tripwire）。
+function guardVocab(label, fn){
+  const before = JSON.stringify(vocab);
+  const r = fn();
+  if(JSON.stringify(vocab) !== before){
+    console.error("[toeic] 單字池在「"+label+"」時被意外變更——不允許（單字持續累積、永不清空）。");
+  }
+  return r;
+}
+
 // 由開始日與考試日推算總天數（含頭尾）；缺考試日則回退 fallback，再退回 TOTAL
 function computeDays(start, exam, fallback){
   if(start && exam){
@@ -1300,11 +1311,13 @@ if(resetBtn){
   resetBtn.onclick=()=>{
     // 只清目前專案的打勾與日期，單字與學習進度一律保留（計劃書 §4.6、§8）
     if(confirm("確定清除目前專案的打勾進度與開始日？單字不會被刪除。此動作無法復原。")){
-      const p=getCurProject();
-      if(p){ p.start=""; p.exam=""; p.days=TOTAL; p.tasks={}; done=p.tasks; saveProjects(); }
-      else { done={}; }
-      localStorage.setItem(LS.tasks, JSON.stringify(done));
-      startDate=""; localStorage.setItem(LS.start,"");
+      guardVocab("清除進度", ()=>{
+        const p=getCurProject();
+        if(p){ p.start=""; p.exam=""; p.days=TOTAL; p.tasks={}; done=p.tasks; saveProjects(); }
+        else { done={}; }
+        localStorage.setItem(LS.tasks, JSON.stringify(done));
+        startDate=""; localStorage.setItem(LS.start,"");
+      });
       if(startInput) startInput.value=""; viewing=1;
       notifyChange();
       renderAll();
@@ -1342,7 +1355,7 @@ if(projDelete){
     const p=getCurProject(); if(!p){ return; }
     // 只移除該專案的日期與打勾，單字與學習進度一律保留（計劃書 §4.6、§8）
     if(confirm('刪除專案「'+p.name+'」？只會移除這個專案的日期與打勾，單字不會被刪除。此動作無法復原。')){
-      deleteProject(p.id);
+      guardVocab("刪除專案", ()=>{ deleteProject(p.id); });
       const np=getCurProject(); done = np ? np.tasks : {};
       const td=todayDay(); viewing=(td && td!==0 && td!==99)? td : 1;
       renderAll();
