@@ -766,17 +766,20 @@ function libStatus(w){
   if(ds>=need) return {key:"due", label:"待複習"};
   return {key:"learn", label:(need-ds)+" 天後複習"};
 }
-// 排程對象＝目前單字庫的字＋任何「已開始學習」(有 lo)的批次字。
-// 批次字可從衝刺頁單字庫按「今天新學」加入今日學習，其到期複習也要出現在
-// 單字庫頁「今天要複習」，否則按了按鈕卻沒有地方複習（閉環才算完成）。
-function schedWords(){
-  const out=libWords();
+// 批次字＝衝刺計畫各批（第 N 批）輸入的字；onlyStarted 只取已開始學習(有 lo)的。
+function batchWords(onlyStarted){
+  const out=[];
   Object.keys(vocab).forEach(k=>{
     if(k==="lib" || !Array.isArray(vocab[k])) return;
-    vocab[k].forEach((w,idx)=>{ if(w.lo) out.push({day:k, idx, word:w}); });
+    vocab[k].forEach((w,idx)=>{ if(!onlyStarted || w.lo) out.push({day:k, idx, word:w}); });
   });
   return out;
 }
+// 排程對象＝目前單字庫的字＋已開始學習的批次字（統計「學習中／今天要複習／已熟記」用）
+function schedWords(){ return libWords().concat(batchWords(true)); }
+// 單字庫頁「全部單字」＝目前庫的字＋所有批次字。批次字也是使用者的字，
+// 只列 lib 桶會讓匯入後看起來像沒進來（且與統計數字對不起來）。
+function libPageWords(){ return libWords().concat(batchWords(false)); }
 function libDue(){ return schedWords().filter(o=>libStatus(o.word).key==="due"); }
 function libCounts(){
   let learning=0, due=0, done=0;
@@ -1151,7 +1154,7 @@ function sortOptionsHTML(cur){
 function renderLibPage(){
   const root=$("#libPageArea"); if(!root) return;
   if(quiz){ root.innerHTML=quizHTML(); wireQuiz(root); return; }   // 測驗中：全頁顯示測驗
-  const all=libWords(), c=libCounts(), due=libDue();
+  const all=libPageWords(), c=libCounts(), due=libDue();
 
   let html='<div class="lp-intro"><div class="kicker">海馬迴間隔複習</div>'
     +'<h2>單字庫</h2><div class="sub">分主題的長期單字庫 · 依真實日期排 +1／+3／+7／+14 複習</div></div>';
