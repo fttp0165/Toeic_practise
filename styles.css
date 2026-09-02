@@ -269,6 +269,13 @@
   .lib-iorow{border-top:1px dashed var(--line);padding-top:9px;}
   .lib-iorow .lib-tbtn{font-size:12px;}
 
+  /* 匯入備份檔時的方式選擇 */
+  .imp-ask{margin-top:8px;padding:10px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);}
+  .imp-q{font-size:12.5px;font-weight:700;margin-bottom:8px;}
+  .imp-btns{display:flex;gap:8px;flex-wrap:wrap;}
+  .imp-btns .lib-tbtn{font-size:12px;}
+  #impRestore:hover{border-color:var(--due);color:var(--due);}
+
   /* review flip-card action buttons */
   .librev .rev-acts{display:none;gap:8px;margin-top:10px;}
   .librev.shown .rev-acts{display:flex;}

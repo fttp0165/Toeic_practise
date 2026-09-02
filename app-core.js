@@ -1122,6 +1122,57 @@ function applyWordsJSON(text){
   saveVocab(); renderAll();
   return {ok:true, added, dup};
 }
+// 從備份檔「只新增單字」：把檔案裡所有桶（含第 N 批）的字併進目前單字庫，
+// 完全不動現有資料；同名字只補上缺的意思／詞性／備註／例句。
+function mergeBackupWords(obj){
+  const src=(obj && obj.vocab && typeof obj.vocab==="object" && !Array.isArray(obj.vocab)) ? obj.vocab : null;
+  if(!src) return {ok:false, err:"備份檔裡沒有單字"};
+  let added=0, dup=0;
+  Object.keys(src).forEach(k=>{
+    if(!Array.isArray(src[k])) return;
+    src[k].forEach(w=>{
+      if(!w || typeof w!=="object") return;
+      const wv=String(w.w||"").trim(); if(!wv) return;
+      const exs=[]; (w.exs||[]).forEach(x=>{ const e=exE(x); if(e) exs.push({e, t:exT(x)}); });
+      const hit=findInCurLib(wv);
+      if(hit){
+        dup++; const wd=hit.word;
+        exs.forEach(nx=>{ if(!(wd.exs||[]).some(x=>exE(x).trim().toLowerCase()===nx.e.toLowerCase())) (wd.exs=wd.exs||[]).push(nx); });
+        if(w.m&&!wd.m)wd.m=w.m; if(w.p&&!wd.p)wd.p=w.p; if(w.n&&!wd.n)wd.n=w.n;
+        return;
+      }
+      if(!Array.isArray(vocab.lib)) vocab.lib=[];
+      const o={w:wv, m:w.m||"", p:w.p||"", exs, n:w.n||"", lib:curLib, da:w.da||todayISO()};
+      if(w.lo){ o.lo=w.lo; o.ri=w.ri||0; }   // 保留原本的學習進度
+      vocab.lib.push(o);
+      added++;
+    });
+  });
+  saveVocab(); renderAll();
+  return {ok:true, added, dup};
+}
+// 備份檔有兩種合理用法，且「整包還原」會覆蓋現有資料，因此讓使用者當下決定。
+function askBackupImportMode(text, obj){
+  const m=document.querySelector("#libIoMsg"); if(!m) return;
+  let n=0; const v=obj.vocab||{};
+  Object.keys(v).forEach(k=>{ if(Array.isArray(v[k])) n+=v[k].length; });
+  m.innerHTML='<div class="imp-ask"><div class="imp-q">這是完整備份檔（'+n+' 字）。要怎麼匯入？</div>'
+    +'<div class="imp-btns">'
+    +'<button class="lib-tbtn" id="impMerge">只新增單字（不動現有資料）</button>'
+    +'<button class="lib-tbtn" id="impRestore">整包還原（覆蓋現有資料）</button>'
+    +'<button class="lib-tbtn" id="impCancel">取消</button></div></div>';
+  const done=msg=>{ const el=document.querySelector("#libIoMsg"); if(el) el.textContent=msg; };
+  m.querySelector("#impMerge").onclick=()=>{
+    const r=mergeBackupWords(obj);
+    done(r.ok ? ("已新增 "+r.added+" 字進「"+curLib+"」"+(r.dup?("，更新 "+r.dup+" 字"):"")) : ("匯入失敗："+r.err));
+  };
+  m.querySelector("#impRestore").onclick=()=>{
+    if(!confirm("整包還原會用備份檔覆蓋目前所有資料（含專案與打勾進度），確定要繼續嗎？")) return;
+    const r=applyBackupJSON(text);
+    done(r.ok ? ("已從 JSON 還原備份（目前單字庫：「"+curLib+"」）") : ("匯入失敗："+r.err));
+  };
+  m.querySelector("#impCancel").onclick=()=>done("已取消匯入。");
+}
 function downloadFile(filename, text, mime){
   const blob=new Blob([text], {type:mime||"text/plain"});
   const url=URL.createObjectURL(blob);
@@ -1253,17 +1304,19 @@ function renderLibPage(){
   const limp=root.querySelector("#libImpFile"); if(limp) limp.onchange=()=>{
     const f=limp.files&&limp.files[0]; if(!f) return;
     const isJson=/\.json$/i.test(f.name);
+    limp.value="";                 // 清掉選取，取消後再選同一個檔才會重新觸發
     f.text().then(t=>{
       let msg;
       if(isJson){
-        const r=applyBackupJSON(t);
-        if(r.ok) msg="已從 JSON 還原備份（目前單字庫：「"+curLib+"」）";
-        else if(r.notBackup){                       // 不是備份檔 → 當成單字清單併進目前庫
+        let obj=null; try{ obj=JSON.parse(t); }catch(e){}
+        if(!obj) msg="匯入失敗：JSON 格式錯誤";
+        else if(obj && typeof obj==="object" && obj._app && obj._app!=="toeic20") msg="匯入失敗：不是有效的備份檔";
+        else if(isBackupObj(obj)){ askBackupImportMode(t, obj); return; }   // 備份檔 → 由使用者選匯入方式
+        else {                                        // 不是備份檔 → 當成單字清單併進目前庫
           const w=applyWordsJSON(t);
           msg = w.ok ? ("JSON 匯入「"+curLib+"」：新增 "+w.added+" 字"+(w.dup?("，更新 "+w.dup+" 字"):""))
                      : ("匯入失敗："+w.err);
         }
-        else msg="匯入失敗："+r.err;
       }
       else { const r=applyCSV(t); msg="CSV 匯入「"+curLib+"」：新增 "+r.added+" 字"+(r.dup?("，更新 "+r.dup+" 字"):""); }
       const m=document.querySelector("#libIoMsg"); if(m) m.textContent=msg;
