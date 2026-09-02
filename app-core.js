@@ -1041,14 +1041,28 @@ function applyCSV(text){
   return {added, dup};
 }
 function buildBackupJSON(){
-  return JSON.stringify({ _app:"toeic20", _v:2, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, projects:projects, curproj:curProj }, null, 2);
+  return JSON.stringify({ _app:"toeic20", _v:2, start:startDate, tasks:done, vocab:vocab, log:log, libs:libs, curlib:curLib, projects:projects, curproj:curProj }, null, 2);
+}
+// 只有「本 App 的完整備份」才可整包覆蓋；否則不能碰既有資料（曾因未擋而把單字庫清空）
+function isBackupObj(o){
+  return !!o && typeof o==="object" && !Array.isArray(o)
+    && (o._app==="toeic20" || (o.vocab && typeof o.vocab==="object" && !Array.isArray(o.vocab)));
 }
 function applyBackupJSON(text){
   let obj; try{ obj=JSON.parse(text); }catch(e){ return {ok:false, err:"JSON 格式錯誤"}; }
-  if(!obj || typeof obj!=="object" || (obj._app && obj._app!=="toeic20")) return {ok:false, err:"不是有效的備份檔"};
+  if(obj && typeof obj==="object" && obj._app && obj._app!=="toeic20") return {ok:false, err:"不是有效的備份檔"};
+  if(!isBackupObj(obj)) return {ok:false, err:"不是備份檔", notBackup:true};   // 交給單字清單匯入處理
   startDate=obj.start||""; done=obj.tasks||{}; vocab=obj.vocab||{}; log=obj.log||{}; libs=Array.isArray(obj.libs)?obj.libs:[];
   Object.keys(log).forEach(k=>{ if(typeof log[k]==="number") log[k]={c:log[k],x:0}; });
   migrateVocab(vocab); migrateLibs();
+  // 還原「目前選取的單字庫」；沒有或失效時自動切到真的有字的庫，
+  // 否則匯入後畫面停在空庫，看起來像「沒有更新單字庫」。
+  if(obj.curlib && libs.indexOf(obj.curlib)>=0) setCurLib(obj.curlib);
+  if(!libWords().length){
+    const alt=libs.find(n=>(vocab.lib||[]).some(w=>wlib(w)===n));
+    if(alt) setCurLib(alt);
+  }
+  setCurLib(curLib);                           // 確保 curLib 有持久化
   adoptProjects(obj.projects, obj.curproj);   // 還原專案；舊備份（無 projects）自動遷移，done 綁回專案
   localStorage.setItem(LS.start,startDate);
   localStorage.setItem(LS.tasks,JSON.stringify(done));
@@ -1058,6 +1072,52 @@ function applyBackupJSON(text){
   if(startInput) startInput.value=curStart();
   notifyChange(); renderAll();
   return {ok:true};
+}
+/* --- 單字清單 JSON 匯入（非備份檔）：把字併進目前單字庫，行為與 CSV 匯入一致 --- */
+function pickField(o, keys){
+  for(let i=0;i<keys.length;i++){ const v=o[keys[i]]; if(v!=null && String(v).trim()!=="") return String(v).trim(); }
+  return "";
+}
+// 接受 [..] 或 {words:[..]} / {vocab:[..]} / {list:[..]}／{data:[..]}
+function wordsFromJSON(obj){
+  if(Array.isArray(obj)) return obj;
+  if(obj && typeof obj==="object"){
+    const keys=["words","vocab","list","data","items"];
+    for(let i=0;i<keys.length;i++){ if(Array.isArray(obj[keys[i]])) return obj[keys[i]]; }
+  }
+  return null;
+}
+function applyWordsJSON(text){
+  let obj; try{ obj=JSON.parse(text); }catch(e){ return {ok:false, err:"JSON 格式錯誤"}; }
+  const arr=wordsFromJSON(obj);
+  if(!arr) return {ok:false, err:"不是備份檔，也不是單字清單"};
+  let added=0, dup=0;
+  arr.forEach(it=>{
+    if(!it || typeof it!=="object" || Array.isArray(it)) return;
+    const wv=pickField(it,["w","word","單字","英文","term"]); if(!wv) return;
+    const mv=pickField(it,["m","meaning","中文","意思","translation","定義"]);
+    const pv=pickField(it,["p","pos","詞性","part_of_speech"]);
+    const nv=pickField(it,["n","note","備註","筆記"]);
+    const exs=[];
+    if(Array.isArray(it.exs)){
+      it.exs.forEach(x=>{ const e=exE(x); if(e) exs.push({e, t:exT(x)}); });
+    } else {
+      const e=pickField(it,["example","ex","例句","sentence"]);
+      if(e) exs.push({e, t:pickField(it,["example_zh","例句中文","例句翻譯","翻譯"])});
+    }
+    const hit=findInCurLib(wv);
+    if(hit){
+      dup++; const wd=hit.word;
+      exs.forEach(nx=>{ if(!(wd.exs||[]).some(x=>exE(x).trim().toLowerCase()===nx.e.toLowerCase())) (wd.exs=wd.exs||[]).push(nx); });
+      if(mv&&!wd.m)wd.m=mv; if(pv&&!wd.p)wd.p=pv; if(nv&&!wd.n)wd.n=nv;
+      return;
+    }
+    if(!Array.isArray(vocab.lib)) vocab.lib=[];
+    vocab.lib.push({w:wv, m:mv, p:pv, exs, n:nv, lib:curLib, da:todayISO()});
+    added++;
+  });
+  saveVocab(); renderAll();
+  return {ok:true, added, dup};
 }
 function downloadFile(filename, text, mime){
   const blob=new Blob([text], {type:mime||"text/plain"});
@@ -1192,7 +1252,16 @@ function renderLibPage(){
     const isJson=/\.json$/i.test(f.name);
     f.text().then(t=>{
       let msg;
-      if(isJson){ const r=applyBackupJSON(t); msg=r.ok?"已從 JSON 還原備份":("匯入失敗："+r.err); }
+      if(isJson){
+        const r=applyBackupJSON(t);
+        if(r.ok) msg="已從 JSON 還原備份（目前單字庫：「"+curLib+"」）";
+        else if(r.notBackup){                       // 不是備份檔 → 當成單字清單併進目前庫
+          const w=applyWordsJSON(t);
+          msg = w.ok ? ("JSON 匯入「"+curLib+"」：新增 "+w.added+" 字"+(w.dup?("，更新 "+w.dup+" 字"):""))
+                     : ("匯入失敗："+w.err);
+        }
+        else msg="匯入失敗："+r.err;
+      }
       else { const r=applyCSV(t); msg="CSV 匯入「"+curLib+"」：新增 "+r.added+" 字"+(r.dup?("，更新 "+r.dup+" 字"):""); }
       const m=document.querySelector("#libIoMsg"); if(m) m.textContent=msg;
     });
